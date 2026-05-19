@@ -4,11 +4,13 @@ Playwright + TypeScript test suite for `dev.investown.net`.
 
 ## What is covered
 
-| Test file                      | Scope                                                               | Status                                 |
-| ------------------------------ | ------------------------------------------------------------------- | -------------------------------------- |
-| `tests/sign-in.spec.ts`        | Login form, valid/invalid credentials, forgot link navigation       | ✅ Automated (4 tests pass)            |
-| `tests/password-reset.spec.ts` | Full E2E reset (request → mail via API → click link → set password) | ⚠️ `test.fixme` (rate-limited)         |
-| `tests/sign-up.spec.ts`        | Sign-up form UI elements (email page, phone page, validation)       | ⏸️ `test.describe.skip` (reCaptcha v3) |
+| Test file                                 | Scope                                                                              | Status                                  |
+| ----------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------- |
+| `tests/sign-in.spec.ts`                   | Login: form, valid/invalid creds, forgot link, empty/malformed email, non-existent | ✅ Automated (8 tests pass, serial)     |
+| `tests/forgot-password.spec.ts`           | Forgot-password: empty + malformed email + non-existent (security)                 | ✅ 2 pass + 1 `test.fixme` (rate-limit) |
+| `tests/password-reset.spec.ts`            | Full E2E reset (request → mail via API → click link → set password)                | ⚠️ `test.fixme` (rate-limited)          |
+| `tests/reset-password-validation.spec.ts` | Password policy rules (length, case, digit, confirm mismatch)                      | ⚠️ `describe.fixme` (rate-limited)      |
+| `tests/sign-up.spec.ts`                   | Sign-up UI smoke (form, navigation, validation)                                    | ⏸️ `describe.skip` (reCaptcha v3)       |
 
 ## What is NOT automated — and why
 

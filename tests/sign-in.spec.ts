@@ -5,6 +5,11 @@ import { loadCurrentPassword } from "../helpers/credentials.js";
 const EMAIL = TEST_DATA.SIGN_UP.EMAIL;
 
 test.describe("Sign in", () => {
+  // Serial — valid + wrong password tests share the seed account.
+  // Investown rate-limits repeated login attempts per account; parallel
+  // execution makes the wrong-password test occasionally flaky.
+  test.describe.configure({ mode: "serial" });
+
   test("login form renders with all elements", async ({ signInPage }) => {
     await signInPage.navigate();
     await expect(signInPage.heading).toBeVisible();
@@ -60,6 +65,51 @@ test.describe("Sign in", () => {
 
     // Real assertion — error must be shown AND URL must not progress.
     // No hard waits; both expects auto-retry.
+    await expect(signInPage.errorMessage).toBeVisible();
+    await expect(page).toHaveURL(/sign-in/);
+  });
+
+  test("login with empty email submits but stays on sign-in (no progress)", async ({
+    signInPage,
+    page,
+  }) => {
+    await signInPage.navigate();
+    await signInPage.passwordInput.fill("AnyPassword123!");
+    await signInPage.logInButton.click();
+    await expect(page).toHaveURL(/sign-in/);
+  });
+
+  test("login with empty password submits but stays on sign-in (no progress)", async ({
+    signInPage,
+    page,
+  }) => {
+    await signInPage.navigate();
+    await signInPage.emailInput.fill(EMAIL);
+    await signInPage.logInButton.click();
+    await expect(page).toHaveURL(/sign-in/);
+  });
+
+  test("login with malformed email stays on sign-in", async ({
+    signInPage,
+    page,
+  }) => {
+    await signInPage.navigate();
+    await signInPage.login("not-an-email", "AnyPassword123!");
+    // Server/client rejected the input. URL must not progress.
+    await expect(page).toHaveURL(/sign-in/);
+  });
+
+  test("login with non-existent user shows generic error (no user enumeration)", async ({
+    signInPage,
+    page,
+  }) => {
+    await signInPage.navigate();
+    await signInPage.login(
+      `a6ncd.nonexistent-${Date.now()}@inbox.testmail.app`,
+      "AnyPassword123!",
+    );
+    // Security: error message must match the wrong-password error exactly —
+    // revealing "user not found" vs "wrong password" enables user enumeration.
     await expect(signInPage.errorMessage).toBeVisible();
     await expect(page).toHaveURL(/sign-in/);
   });
