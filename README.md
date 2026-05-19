@@ -103,10 +103,19 @@ auth/             [GITIGNORED] Persisted current password between runs
 - **No personal credentials** — all secrets in `.env` (gitignored).
 - **Idempotent password handling** — see "Password drift" above.
 
+## Parallel execution
+
+`playwright.config.ts` runs tests in parallel by default:
+
+- `fullyParallel: true` — tests inside a `describe` block run in parallel.
+- `workers` — auto-detected locally (one per CPU core); CI uses 2.
+- **`tests/password-reset.spec.ts` opts into serial mode** via `test.describe.configure({ mode: "serial" })` because it mutates the shared seed account (password + reset token). Running two resets concurrently would race the testmail.app inbox and Investown's rate-limit.
+- **`tests/sign-in.spec.ts` runs all 4 tests in parallel** — they're read-only against the account. Suite runtime ~15s with 4 workers (vs ~50s serial).
+
 ## CI considerations
 
 - `auth/current-password.json` is **gitignored** — CI must run `password-reset.spec.ts` BEFORE `sign-in.spec.ts` (or seed the auth file from a secret).
-- Tests use `--workers=1` to avoid race conditions on shared test account.
+- Default `workers: 2` in CI (env `CI=true`) — single shared test account limits horizontal scaling.
 - Investown rate-limits password reset requests; full suite run typically takes 2–3 min.
 
 ## References
