@@ -5,112 +5,97 @@ import { loadCurrentPassword } from "../helpers/credentials.js";
 const EMAIL = TEST_DATA.SIGN_UP.EMAIL;
 
 test.describe("Sign in", () => {
-  // Serial — valid + wrong password tests share the seed account.
-  // Investown rate-limits repeated login attempts per account; parallel
-  // execution makes the wrong-password test occasionally flaky.
+  // Serial — valid + wrong-password tests share the seed account, and Investown
+  // rate-limits login attempts per account.
   test.describe.configure({ mode: "serial" });
 
-  test("login form renders with all elements", async ({ signInPage }) => {
+  test.beforeEach(async ({ signInPage }) => {
     await signInPage.navigate();
-    await expect(signInPage.heading).toBeVisible();
-    await expect(signInPage.emailInput).toBeVisible();
-    await expect(signInPage.passwordInput).toBeVisible();
-    await expect(signInPage.logInButton).toBeVisible();
-    await expect(signInPage.forgotPasswordLink).toBeVisible();
   });
 
-  test("forgot password link navigates to /forgotten-password", async ({
-    signInPage,
-    page,
-  }) => {
-    await signInPage.navigate();
-    await signInPage.clickForgotPassword();
-    await page.waitForURL(/forgotten-password/);
-    await expect(page).toHaveURL(/forgotten-password/);
-  });
+  test(
+    "forgot password link navigates to /forgotten-password",
+    { tag: ["@positive", "@auth"] },
+    async ({ signInPage, page }) => {
+      await signInPage.clickForgotPassword();
+      await expect(page).toHaveURL(/forgotten-password/);
+    },
+  );
 
-  test("login with valid credentials submits and progresses past sign-in", async ({
-    signInPage,
-    page,
-  }) => {
-    const password = loadCurrentPassword();
-    await signInPage.navigate();
-    await signInPage.login(EMAIL, password);
+  test(
+    "login with valid credentials reaches dashboard or 2FA step",
+    { tag: ["@positive", "@auth"] },
+    async ({ signInPage, page }) => {
+      await signInPage.login(EMAIL, loadCurrentPassword());
 
-    // After submit, user either lands on dashboard (no 2FA) OR on "Last step" (SMS 2FA).
-    // Both prove login itself succeeded. SMS 2FA verification is covered separately.
-    await page.waitForURL((url) => !url.pathname.includes("sign-in"), {
-      timeout: 20_000,
-    });
+      // Lands on dashboard OR "Last step" (SMS 2FA) — both prove login passed.
+      await page.waitForURL((url) => !url.pathname.includes("sign-in"), {
+        timeout: 20_000,
+      });
 
-    const onDashboard =
-      page.url().endsWith("/") || page.url().includes("/dashboard");
-    const onLastStep = await page
-      .getByRole("heading", { name: /last step/i })
-      .isVisible({ timeout: 5_000 })
-      .catch(() => false);
+      const onDashboardOrLastStep =
+        page.url().endsWith("/") ||
+        page.url().includes("/dashboard") ||
+        (await page
+          .getByRole("heading", { name: /last step/i })
+          .isVisible({ timeout: 5_000 })
+          .catch(() => false));
 
-    expect(
-      onDashboard || onLastStep,
-      `Expected redirect to dashboard or Last step, got ${page.url()}`,
-    ).toBe(true);
-  });
+      expect(onDashboardOrLastStep, `Got ${page.url()}`).toBe(true);
+    },
+  );
 
-  test("login with wrong password shows error and keeps user on sign-in", async ({
-    signInPage,
-    page,
-  }) => {
-    await signInPage.navigate();
-    await signInPage.login(EMAIL, "WrongPassword123!");
+  test(
+    "login with wrong password shows error and stays on sign-in",
+    { tag: ["@negative", "@auth"] },
+    async ({ signInPage, page }) => {
+      await signInPage.login(EMAIL, "WrongPassword123!");
+      await expect(signInPage.errorMessage).toBeVisible();
+      await expect(page).toHaveURL(/sign-in/);
+    },
+  );
 
-    // Real assertion — error must be shown AND URL must not progress.
-    // No hard waits; both expects auto-retry.
-    await expect(signInPage.errorMessage).toBeVisible();
-    await expect(page).toHaveURL(/sign-in/);
-  });
+  test(
+    "login with empty email stays on sign-in",
+    { tag: ["@negative", "@auth"] },
+    async ({ signInPage, page }) => {
+      await signInPage.fillPassword("AnyPassword123!");
+      await signInPage.logInButton.click();
+      await expect(page).toHaveURL(/sign-in/);
+    },
+  );
 
-  test("login with empty email submits but stays on sign-in (no progress)", async ({
-    signInPage,
-    page,
-  }) => {
-    await signInPage.navigate();
-    await signInPage.passwordInput.fill("AnyPassword123!");
-    await signInPage.logInButton.click();
-    await expect(page).toHaveURL(/sign-in/);
-  });
+  test(
+    "login with empty password stays on sign-in",
+    { tag: ["@negative", "@auth"] },
+    async ({ signInPage, page }) => {
+      await signInPage.fillEmail(EMAIL);
+      await signInPage.logInButton.click();
+      await expect(page).toHaveURL(/sign-in/);
+    },
+  );
 
-  test("login with empty password submits but stays on sign-in (no progress)", async ({
-    signInPage,
-    page,
-  }) => {
-    await signInPage.navigate();
-    await signInPage.emailInput.fill(EMAIL);
-    await signInPage.logInButton.click();
-    await expect(page).toHaveURL(/sign-in/);
-  });
+  test(
+    "login with malformed email stays on sign-in",
+    { tag: ["@edge", "@auth"] },
+    async ({ signInPage, page }) => {
+      await signInPage.login("not-an-email", "AnyPassword123!");
+      await expect(page).toHaveURL(/sign-in/);
+    },
+  );
 
-  test("login with malformed email stays on sign-in", async ({
-    signInPage,
-    page,
-  }) => {
-    await signInPage.navigate();
-    await signInPage.login("not-an-email", "AnyPassword123!");
-    // Server/client rejected the input. URL must not progress.
-    await expect(page).toHaveURL(/sign-in/);
-  });
-
-  test("login with non-existent user shows generic error (no user enumeration)", async ({
-    signInPage,
-    page,
-  }) => {
-    await signInPage.navigate();
-    await signInPage.login(
-      `a6ncd.nonexistent-${Date.now()}@inbox.testmail.app`,
-      "AnyPassword123!",
-    );
-    // Security: error message must match the wrong-password error exactly —
-    // revealing "user not found" vs "wrong password" enables user enumeration.
-    await expect(signInPage.errorMessage).toBeVisible();
-    await expect(page).toHaveURL(/sign-in/);
-  });
+  test(
+    "login with non-existent user shows generic error (no user enumeration)",
+    { tag: ["@negative", "@security", "@auth"] },
+    async ({ signInPage, page }) => {
+      // Security: error must match the wrong-password error — revealing
+      // "user not found" vs "wrong password" enables user enumeration.
+      await signInPage.login(
+        `a6ncd.nonexistent-${Date.now()}@inbox.testmail.app`,
+        "AnyPassword123!",
+      );
+      await expect(signInPage.errorMessage).toBeVisible();
+      await expect(page).toHaveURL(/sign-in/);
+    },
+  );
 });

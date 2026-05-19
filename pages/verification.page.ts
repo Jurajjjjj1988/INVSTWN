@@ -9,9 +9,9 @@ export class VerificationPage {
   constructor(page: Page) {
     this.page = page;
     this.heading = page.getByRole("heading", { name: "Identity verification" });
-    this.bankIdButton = page.getByRole("button", { name: /Bank iD/i });
+    this.bankIdButton = page.getByRole("button", { name: "Bank iD" });
     this.documentButton = page.getByRole("button", {
-      name: /photographing document/i,
+      name: "Photographing a document",
     });
   }
 

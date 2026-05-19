@@ -13,7 +13,9 @@ export class SignUpEmailPage {
     this.page = page;
     this.heading = page.getByRole("heading", { name: "Sign up to Investown" });
     this.emailInput = page.getByRole("textbox", { name: "E-mail address" });
-    this.promoCheckbox = page.getByRole("checkbox", { name: /promo code/i });
+    this.promoCheckbox = page.getByRole("checkbox", {
+      name: "I have a promo code from a financial advisor or influencer",
+    });
     this.continueButton = page.getByRole("button", { name: "Continue" });
     this.logInLink = page.getByRole("link", { name: "Log in" });
     this.businessLink = page.getByRole("link", {

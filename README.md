@@ -4,33 +4,43 @@ Playwright + TypeScript test suite for `dev.investown.net`.
 
 ## What is covered
 
-| Test file                                 | Scope                                                                              | Status                                  |
-| ----------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------- |
-| `tests/sign-in.spec.ts`                   | Login: form, valid/invalid creds, forgot link, empty/malformed email, non-existent | ✅ **8 tests pass** (serial)            |
-| `tests/forgot-password.spec.ts`           | Forgot-password: empty + malformed email + non-existent (security)                 | ✅ 2 pass + 1 `test.fixme` (rate-limit) |
-| `tests/password-reset.spec.ts`            | Full E2E reset (request → mail via API → click link → set password)                | ⚠️ `test.fixme` (rate-limited)          |
-| `tests/reset-password-validation.spec.ts` | Password policy rules (length, case, digit, confirm mismatch)                      | ⚠️ `describe.fixme` (rate-limited)      |
-| `tests/sign-up.spec.ts`                   | Sign-up UI smoke (form, navigation, validation)                                    | ⏸️ `describe.skip` (reCaptcha v3)       |
+| Test file                                 | Scope                                                                              | Status                             |
+| ----------------------------------------- | ---------------------------------------------------------------------------------- | ---------------------------------- |
+| `tests/sign-in.spec.ts`                   | Login: form, valid/invalid creds, forgot link, empty/malformed email, non-existent | ✅ **7 tests pass** (serial)       |
+| `tests/forgot-password.spec.ts`           | Forgot-password: empty + malformed email + non-existent (security)                 | ✅ 2 pass + 1 `test.fixme`         |
+| `tests/password-reset.spec.ts`            | Full E2E: UI request → mail API → **Cognito API submit** → UI login                | ✅ **1 test pass** (hybrid UI+API) |
+| `tests/reset-password-validation.spec.ts` | Password policy rules (length, case, digit, confirm mismatch)                      | ⚠️ `describe.fixme` (rate-limited) |
+| `tests/sign-up.spec.ts`                   | Sign-up UI smoke (form, navigation, validation)                                    | ⏸️ `describe.skip` (reCaptcha v3)  |
+
+## Hybrid UI + API password reset
+
+**Why hybrid:** Investown's reset form uses React Hook Form with `mode: 'onBlur'` + anti-bot detection. Playwright `fill()` emits `input` but not `blur`, so RHF validators don't run and the submit button stays disabled (see [Playwright #15813](https://github.com/microsoft/playwright/issues/15813)). After exhausting fill workarounds we **bypass the form** by calling the same AWS Cognito endpoint AWS Amplify uses on the frontend:
+
+```
+POST cognito-idp.eu-west-1.amazonaws.com
+X-Amz-Target: AWSCognitoIdentityProviderService.ConfirmForgotPassword
+{ Username, ConfirmationCode, Password, ClientId }
+```
+
+**Flow:**
+
+1. **UI** — open `/forgotten-password`, submit email
+2. **API** (testmail.app) — fetch reset mail, extract `c=` code from URL hash
+3. **API** (Cognito) — POST `ConfirmForgotPassword` with code + new password
+4. **UI** — login with new password verifies the reset on real backend
+
+Tested contract = same one frontend uses. RHF/anti-bot fragility removed. See `helpers/cognito.ts`.
 
 ## What is NOT automated — and why
 
-Three platform-side blockers, all documented in the test files:
+Two platform-side blockers:
 
-1. **Full sign-up flow with SMS OTP verification** (`sign-up.spec.ts` — `test.describe.skip`)
-   Investown reCaptcha v3 redirects headless bundled Chromium to sign-in before the form renders. Real Chrome (`channel: 'chrome'`) works but disturbs the user during runs. Documented for when a test reCaptcha key is available.
-2. **Full password-reset E2E** (`password-reset.spec.ts` — `test.fixme`)
-   Investown rate-limits the password-reset endpoint per account. Re-running within ~30 min causes the mail to never arrive. Code is complete; needs a dedicated test account per run or longer cool-down.
-3. **Post-login SMS 2FA verification**
-   KYC compliance control — not bypassable client-side. Sign-in test handles the branching (lands on dashboard OR "Last step" 2FA page — both prove login succeeded).
+1. **Full sign-up flow** (`sign-up.spec.ts` — `test.describe.skip`)
+   Investown reCaptcha v3 redirects headless bundled Chromium to sign-in before the form renders. Real Chrome works but disturbs the user during runs. Add a test reCaptcha key on dev to unblock.
+2. **Password-reset UI validation rules** (`reset-password-validation.spec.ts` — `describe.fixme`)
+   Requires a fresh reset link in `beforeAll`, which hits the per-account rate-limit when run alongside `password-reset.spec.ts`. Re-enable with a dedicated test account or longer cool-down.
 
-### Reset-password POM — React Hook Form fix (preserved)
-
-`pages/reset-password.page.ts` `setNewPassword()` uses `pressSequentially({ delay: 30 }) + press('Tab')` instead of `fill()`. Investown's reset form uses React Hook Form with `mode: 'onBlur'` — plain `fill()` emits `input` but not `blur`, RHF validators don't run, submit button stays disabled. See [Playwright #15813](https://github.com/microsoft/playwright/issues/15813). The fix is preserved; full E2E will pass once the per-account password-reset rate-limit decays (~30+ min between runs).
-
-**To unblock locally:**
-
-- Wait ≥30 min after the last reset request on the test account, OR
-- Sign up a fresh account (new testmail alias + new UK number), update `.env`, re-enable the `fixme`'d tests.
+**Sign-in test handles SMS 2FA branching** — login lands on dashboard OR "Last step" 2FA page, both prove login passed. KYC SMS 2FA itself is not bypassable.
 
 Industry-standard approaches:
 
@@ -118,10 +128,10 @@ auth/             [GITIGNORED] Persisted current password between runs
 
 `playwright.config.ts` runs tests in parallel by default:
 
-- `fullyParallel: true` — tests inside a `describe` block run in parallel.
+- `fullyParallel: true` — tests across `describe` blocks / spec files run in parallel.
 - `workers` — auto-detected locally (one per CPU core); CI uses 2.
-- **`tests/password-reset.spec.ts` opts into serial mode** via `test.describe.configure({ mode: "serial" })` because it mutates the shared seed account (password + reset token). Running two resets concurrently would race the testmail.app inbox and Investown's rate-limit.
-- **`tests/sign-in.spec.ts` runs all 4 tests in parallel** — they're read-only against the account. Suite runtime ~15s with 4 workers (vs ~50s serial).
+- **`tests/password-reset.spec.ts` + `tests/sign-in.spec.ts` opt into serial mode** via `test.describe.configure({ mode: "serial" })` — both share the single seed account. Sign-in's valid + wrong-password tests would race Investown's per-account login rate-limit if parallel.
+- Other spec files run in parallel automatically.
 
 ## CI considerations
 

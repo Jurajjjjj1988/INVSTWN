@@ -40,9 +40,24 @@ export class SignInPage {
     }
   }
 
-  async login(email: string, password: string): Promise<void> {
+  /**
+   * Fill email + fire blur — Investown form uses React Hook Form, fill()
+   * alone doesn't trigger validation. See playwright #15813.
+   */
+  async fillEmail(email: string): Promise<void> {
     await this.emailInput.fill(email);
+    await this.emailInput.dispatchEvent("blur");
+  }
+
+  /** Fill password + fire blur — same RHF reason as fillEmail. */
+  async fillPassword(password: string): Promise<void> {
     await this.passwordInput.fill(password);
+    await this.passwordInput.dispatchEvent("blur");
+  }
+
+  async login(email: string, password: string): Promise<void> {
+    await this.fillEmail(email);
+    await this.fillPassword(password);
     await this.logInButton.click();
   }
 

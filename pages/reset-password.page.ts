@@ -21,19 +21,17 @@ export class ResetPasswordPage {
   }
 
   async setNewPassword(newPassword: string): Promise<void> {
-    // Investown's reset form uses React Hook Form. fill() doesn't trigger
-    // the validators (button stays disabled). pressSequentially simulates
-    // real keystrokes which fire per-character React state updates, then
-    // Tab triggers the final blur that runs schema validation.
-    // See: github.com/microsoft/playwright/issues/15813
+    // Investown's reset form uses React Hook Form with mode:'onBlur'.
+    // fill() emits 'input' but NOT 'blur' — RHF won't validate until blur,
+    // so the submit button stays disabled. `dispatchEvent('blur')` is the
+    // canonical fix per Playwright #15813 and RHF discussion #1776.
     await this.newPasswordInput.waitFor({ state: "visible" });
-    await this.newPasswordInput.click();
-    await this.newPasswordInput.pressSequentially(newPassword, { delay: 30 });
-    await this.newPasswordInput.press("Tab");
-    await this.confirmPasswordInput.pressSequentially(newPassword, {
-      delay: 30,
-    });
-    await this.confirmPasswordInput.press("Tab");
+    await this.newPasswordInput.fill(newPassword);
+    await this.newPasswordInput.dispatchEvent("blur");
+    await this.confirmPasswordInput.fill(newPassword);
+    await this.confirmPasswordInput.dispatchEvent("blur");
+    // Assert button enabled BEFORE click — surfaces real error if validation
+    // didn't fire instead of a misleading "click intercepted".
     await expect(this.submitButton).toBeEnabled({ timeout: 5_000 });
     await this.submitButton.click();
   }

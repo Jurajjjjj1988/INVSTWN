@@ -9,43 +9,57 @@ test.describe.skip("Sign Up - Email Page (UI smoke)", () => {
     await signUpEmailPage.navigate();
   });
 
-  test("user submits email and reaches phone step", async ({
-    signUpEmailPage,
-    signUpPhonePage,
-    page,
-  }) => {
-    await expect(signUpEmailPage.heading).toBeVisible(); // sanity guard
+  test(
+    "user submits email and reaches phone step",
+    {
+      tag: ["@positive", "@signup"],
+    },
+    async ({ signUpEmailPage, signUpPhonePage, page }) => {
+      await expect(signUpEmailPage.heading).toBeVisible(); // sanity guard
 
-    await signUpEmailPage.submitEmail(TEST_DATA.SIGN_UP.EMAIL);
+      await signUpEmailPage.submitEmail(TEST_DATA.SIGN_UP.EMAIL);
 
-    await expect(page).toHaveURL(/sign-up\/(credentials|phone)/);
-    // Outcome assertion — submission progressed past email step.
-  });
+      await expect(page).toHaveURL(/sign-up\/(credentials|phone)/);
+      // Outcome assertion — submission progressed past email step.
+    },
+  );
 
-  test("user clicks 'Log in' link and reaches sign-in page", async ({
-    signUpEmailPage,
-    page,
-  }) => {
-    await signUpEmailPage.logInLink.click();
-    await expect(page).toHaveURL(/sign-in/);
-    await expect(
-      page.getByRole("heading", { name: "Log in to Investown" }),
-    ).toBeVisible();
-  });
+  test(
+    "user clicks 'Log in' link and reaches sign-in page",
+    {
+      tag: ["@positive", "@navigation"],
+    },
+    async ({ signUpEmailPage, page }) => {
+      await signUpEmailPage.logInLink.click();
+      await expect(page).toHaveURL(/sign-in/);
+      await expect(
+        page.getByRole("heading", { name: "Log in to Investown" }),
+      ).toBeVisible();
+    },
+  );
 
-  test("user clicks 'Investown for Business' link and reaches business signup", async ({
-    signUpEmailPage,
-    page,
-  }) => {
-    await signUpEmailPage.businessLink.click();
-    await expect(page).toHaveURL(/sign-up\/legal-entity/);
-  });
+  test(
+    "user clicks 'Investown for Business' link and reaches business signup",
+    {
+      tag: ["@positive", "@navigation"],
+    },
+    async ({ signUpEmailPage, page }) => {
+      await signUpEmailPage.businessLink.click();
+      await expect(page).toHaveURL(/sign-up\/legal-entity/);
+    },
+  );
 
-  test("promo code checkbox toggles on click", async ({ signUpEmailPage }) => {
-    await expect(signUpEmailPage.promoCheckbox).not.toBeChecked();
-    await signUpEmailPage.checkPromoCode();
-    await expect(signUpEmailPage.promoCheckbox).toBeChecked();
-  });
+  test(
+    "promo code checkbox toggles on click",
+    {
+      tag: ["@edge", "@signup"],
+    },
+    async ({ signUpEmailPage }) => {
+      await expect(signUpEmailPage.promoCheckbox).not.toBeChecked();
+      await signUpEmailPage.checkPromoCode();
+      await expect(signUpEmailPage.promoCheckbox).toBeChecked();
+    },
+  );
 });
 
 test.describe.skip("Sign Up - Phone Page (UI smoke)", () => {
@@ -55,16 +69,20 @@ test.describe.skip("Sign Up - Phone Page (UI smoke)", () => {
     await expect(signUpPhonePage.heading).toBeVisible();
   });
 
-  test("Send SMS button stays disabled until phone is entered", async ({
-    signUpPhonePage,
-  }) => {
-    await signUpPhonePage.phoneInput.clear();
-    await expect(signUpPhonePage.sendSmsButton).toBeDisabled();
+  test(
+    "Send SMS button stays disabled until phone is entered",
+    {
+      tag: ["@negative", "@signup"],
+    },
+    async ({ signUpPhonePage }) => {
+      await signUpPhonePage.phoneInput.clear();
+      await expect(signUpPhonePage.sendSmsButton).toBeDisabled();
 
-    // Real user behavior — typing a valid number enables the button.
-    await signUpPhonePage.fillPhone(TEST_DATA.SIGN_UP.PHONE);
-    await expect(signUpPhonePage.sendSmsButton).toBeEnabled();
-  });
+      // Real user behavior — typing a valid number enables the button.
+      await signUpPhonePage.fillPhone(TEST_DATA.SIGN_UP.PHONE);
+      await expect(signUpPhonePage.sendSmsButton).toBeEnabled();
+    },
+  );
 });
 
 // Full sign-up E2E (post-phone OTP, credentials, password) is excluded:

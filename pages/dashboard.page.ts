@@ -13,11 +13,15 @@ export class DashboardPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.greeting = page.getByText(/Hello .+!/);
+    // Anchored regex: "Hello " followed by name and exclamation mark — avoids
+    // matching unrelated marketing copy containing "Hello".
+    this.greeting = page.getByText(/^Hello\s+\S.*!$/);
     this.dashboardLink = page.getByRole("link", { name: "Dashboard" });
     this.portfolioLink = page.getByRole("link", { name: "Portfolio" });
     this.transactionsLink = page.getByRole("link", { name: "Transactions" });
-    this.walletLink = page.getByRole("link", { name: /CZK/ });
+    // Anchored to wallet balance format ("CZK 0", "CZK 1,234.50") — avoids
+    // matching any link that just contains the currency code.
+    this.walletLink = page.getByRole("link", { name: /^CZK\s/ });
     this.completeVerificationButton = page.getByRole("button", {
       name: "Complete the verification",
     });
