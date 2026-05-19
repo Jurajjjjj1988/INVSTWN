@@ -102,7 +102,8 @@ npx playwright test sign-in.spec.ts   # one file
 data/             Test data constants (env-driven)
 fixtures/         Playwright fixtures (POM injection)
 helpers/
-  ├── testmail.ts      testmail.app API wrapper (waitForEmail, extractLink)
+  ├── testmail.ts      testmail.app API wrapper (waitForEmail, extractLink, testmailTag)
+  ├── cognito.ts       AWS Cognito ConfirmForgotPassword (hybrid password reset)
   └── credentials.ts   Load/save current password between test runs
 pages/            Page Object Models
   ├── sign-up-email.page.ts
