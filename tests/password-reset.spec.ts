@@ -8,6 +8,10 @@ const EMAIL = TEST_DATA.SIGN_UP.EMAIL; // a6ncd.investown2@inbox.testmail.app
 const TAG = EMAIL.split("@")[0].split(".").slice(1).join(".") || "investown2";
 
 test.describe("Password reset", () => {
+  // Serial — these tests mutate the shared seed account (password + reset code).
+  // Two resets in parallel would race the testmail.app inbox and Investown rate-limit.
+  test.describe.configure({ mode: "serial" });
+
   // testmail.app livequery + Investown SMTP delay can total up to 90s
   test.setTimeout(120_000);
 

@@ -3,7 +3,10 @@ import "dotenv/config";
 
 export default defineConfig({
   testDir: "./tests",
-  fullyParallel: false,
+  // Parallel by default. Tests that mutate shared state (password-reset.spec.ts)
+  // opt into serial mode via test.describe.configure({ mode: "serial" }).
+  fullyParallel: true,
+  workers: process.env.CI ? 2 : undefined, // local: all cores; CI: 2 (one test account)
   retries: 1,
   timeout: 30_000,
   expect: { timeout: 10_000 },
