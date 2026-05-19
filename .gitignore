@@ -1,0 +1,13 @@
+node_modules/
+playwright-report/
+test-results/
+playwright/.cache/
+
+# Secrets — never commit
+.env
+.env.local
+auth.json
+auth/
+
+# OS
+.DS_Store

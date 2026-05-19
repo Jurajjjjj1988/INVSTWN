@@ -1,0 +1,15 @@
+{
+  "name": "investown-tests",
+  "version": "1.0.0",
+  "description": "E2E tests for Investown investment platform",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "typecheck": "playwright test --list"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0",
+    "dotenv": "^17.0.0"
+  }
+}
