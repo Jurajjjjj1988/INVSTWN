@@ -19,9 +19,13 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
-      // Sign-up tests are UI smoke only (no submit → no reCaptcha v3 challenge).
-      // Sign-in + password-reset don't hit reCaptcha v3. Bundled Chromium headless is fine.
+      use: {
+        ...devices["Desktop Chrome"],
+        // Real Chrome — bundled Chromium has subtle differences with React
+        // controlled inputs on the reset-password form (fill doesn't flip the
+        // submit button enabled state). Stays headless.
+        channel: "chrome",
+      },
     },
   ],
 });

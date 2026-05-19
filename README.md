@@ -6,7 +6,7 @@ Playwright + TypeScript test suite for `dev.investown.net`.
 
 | Test file                                 | Scope                                                                              | Status                                  |
 | ----------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------- |
-| `tests/sign-in.spec.ts`                   | Login: form, valid/invalid creds, forgot link, empty/malformed email, non-existent | ✅ Automated (8 tests pass, serial)     |
+| `tests/sign-in.spec.ts`                   | Login: form, valid/invalid creds, forgot link, empty/malformed email, non-existent | ✅ **8 tests pass** (serial)            |
 | `tests/forgot-password.spec.ts`           | Forgot-password: empty + malformed email + non-existent (security)                 | ✅ 2 pass + 1 `test.fixme` (rate-limit) |
 | `tests/password-reset.spec.ts`            | Full E2E reset (request → mail via API → click link → set password)                | ⚠️ `test.fixme` (rate-limited)          |
 | `tests/reset-password-validation.spec.ts` | Password policy rules (length, case, digit, confirm mismatch)                      | ⚠️ `describe.fixme` (rate-limited)      |
@@ -22,6 +22,15 @@ Three platform-side blockers, all documented in the test files:
    Investown rate-limits the password-reset endpoint per account. Re-running within ~30 min causes the mail to never arrive. Code is complete; needs a dedicated test account per run or longer cool-down.
 3. **Post-login SMS 2FA verification**
    KYC compliance control — not bypassable client-side. Sign-in test handles the branching (lands on dashboard OR "Last step" 2FA page — both prove login succeeded).
+
+### Reset-password POM — React Hook Form fix (preserved)
+
+`pages/reset-password.page.ts` `setNewPassword()` uses `pressSequentially({ delay: 30 }) + press('Tab')` instead of `fill()`. Investown's reset form uses React Hook Form with `mode: 'onBlur'` — plain `fill()` emits `input` but not `blur`, RHF validators don't run, submit button stays disabled. See [Playwright #15813](https://github.com/microsoft/playwright/issues/15813). The fix is preserved; full E2E will pass once the per-account password-reset rate-limit decays (~30+ min between runs).
+
+**To unblock locally:**
+
+- Wait ≥30 min after the last reset request on the test account, OR
+- Sign up a fresh account (new testmail alias + new UK number), update `.env`, re-enable the `fixme`'d tests.
 
 Industry-standard approaches:
 
