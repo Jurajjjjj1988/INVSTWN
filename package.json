@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "E2E tests for Investown investment platform",
   "scripts": {
-    "test": "playwright test",
+    "test": "playwright test --grep-invert @slow",
+    "test:slow": "playwright test --grep @slow --workers=1",
+    "test:all": "playwright test",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
     "typecheck": "playwright test --list"

@@ -158,11 +158,27 @@ This makes the suite **idempotent** — runs in any order produce the same final
 ## Run
 
 ```bash
-npm test                              # all tests, headless
+npm test                              # fast suite (mocked), headless — default for CI/PR
+npm run test:slow                     # slow suite (real backend), workers=1
+npm run test:all                      # everything — fast + slow
 npm run test:headed                   # visible browser
 npm run test:ui                       # interactive UI mode
 npx playwright test sign-in.spec.ts   # one file
 ```
+
+### Suite split
+
+| Command             | What runs                                               | Wall-clock |
+| ------------------- | ------------------------------------------------------- | ---------- |
+| `npm test`          | Fast (mocked) — default for CI/PR                       | <2 min     |
+| `npm run test:slow` | Slow (real backend) — hits mailsac / Cognito / Intercom | 3-5 min    |
+| `npm run test:all`  | Everything                                              | 5-7 min    |
+
+Slow tests are tagged `@slow`. They exist because some flows (full
+password reset E2E, Intercom widget, real UI login round-trip) can't
+be safely mocked end-to-end. Run them locally before merging anything
+that touches auth or chat, or wire up a nightly workflow that runs
+`npm run test:slow` on a cron schedule.
 
 ### Environment + cross-browser
 

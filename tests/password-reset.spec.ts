@@ -16,7 +16,7 @@ test.describe("Password reset", () => {
 
   test(
     "user resets forgotten password and logs in with the new one",
-    { tag: ["@positive", "@auth", "@password", "@e2e"] },
+    { tag: ["@positive", "@auth", "@password", "@e2e", "@slow"] },
     async ({ forgotPasswordPage, signInPage, page }) => {
       const newPassword = TEST_DATA.SIGN_UP.PASSWORD;
 

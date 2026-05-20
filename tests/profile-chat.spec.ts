@@ -39,7 +39,7 @@ test.describe("Profile — Chatbot", () => {
 
   test(
     "clicking the Intercom launcher opens the chat messenger panel",
-    { tag: ["@positive", "@chat", "@support"] },
+    { tag: ["@positive", "@chat", "@support", "@slow"] },
     async ({ page }) => {
       const profile = new ProfilePage(page);
       await profile.gotoSection("support");
@@ -74,7 +74,7 @@ test.describe("Profile — Chatbot", () => {
 
   test(
     "open messenger shows the personalized greeting heading",
-    { tag: ["@positive", "@chat", "@support"] },
+    { tag: ["@positive", "@chat", "@support", "@slow"] },
     async ({ page }) => {
       const profile = new ProfilePage(page);
       await profile.gotoSection("support");

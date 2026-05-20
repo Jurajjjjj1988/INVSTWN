@@ -30,7 +30,7 @@ test.describe("Sign in", () => {
 
   test(
     "login with valid credentials reaches dashboard or 2FA step",
-    { tag: ["@positive", "@auth"] },
+    { tag: ["@positive", "@auth", "@slow"] },
     async ({ signInPage, page }) => {
       await signInPage.login(EMAIL, loadCurrentPassword());
 
