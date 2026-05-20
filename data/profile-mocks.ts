@@ -11,14 +11,9 @@ import type { Page, Route, Request } from "@playwright/test";
  * Endpoint host: `dev-api.investown.net` (configured per environment). Patterns
  * use `**` wildcards so they match regardless of protocol/subdomain quirks.
  *
- * Discovery notes (recorded for future maintainers):
- *   - REST endpoints observed via DevTools while navigating /user/*.
- *   - GraphQL response shapes assumed to follow Apollo standard
- *     ({ data, errors }) — adjust the inner `data` keys if real captures differ.
- *   - Password change endpoint NOT observed in initial mapping; we mock all
- *     three plausible locations (REST under /users/api/, GraphQL on
- *     /core/api/graphql or /users/api/graphql, and Cognito direct) so the
- *     test fires the right behavior regardless of which the app actually hits.
+ * GraphQL responses follow Apollo standard envelope ({ data, errors }).
+ * Password change endpoint is hedged across REST, GraphQL, and Cognito direct
+ * (the app's actual call site wasn't observable in initial mapping).
  */
 
 // ---------------------------------------------------------------------------
@@ -28,33 +23,22 @@ import type { Page, Route, Request } from "@playwright/test";
 /**
  * Subset of GET /users/api/v1/users/details that tests can override.
  *
- * IMPORTANT: the real response has MANY more fields (level object, intercomUserHash*,
- * dismissedBanners, signedUpAt, inflectedName, preferredLocale, isSmsMfaEnabled,
- * canInvest, etc.) and the app crashes on render if those fields are missing. So
- * `mockUserDetails` does NOT build a response from scratch — it fetches the real
- * response and then patches only the fields below over the top. This means tests
- * keep the freedom to override e.g. firstName/lastName for XSS payloads while the
- * rest of the user object stays realistic.
- *
- * The renamed `phone` → `phoneNumber` mirrors the actual API key. `email` is the
- * top-level key the API uses. `idDocumentNumber` is mapped into the nested
- * `documentNumber` field on /userVerification when present — keeping a separate
- * fixture key here would just be confusing.
+ * The real response has many more fields (level, intercomUserHash*, dismissedBanners,
+ * signedUpAt, inflectedName, isSmsMfaEnabled, canInvest, …) and the app crashes if
+ * they're missing. `mockUserDetails` fetches the real response and patches these
+ * fields over the top — tests get freedom to override key fields (e.g. for XSS
+ * payloads) while the rest stays realistic.
  */
 export type UserDetailsFixture = {
   firstName: string;
   lastName: string;
   email: string;
-  /**
-   * Phone number, raw form (no spaces). The UI formats display; tests still
-   * assert on the FORMATTED form because that's what the user sees.
-   */
+  /** Phone number, raw form (no spaces). UI formats for display; assertions use the formatted form. */
   phoneNumber: string;
   /**
    * Locale tag the UI consults to render Czech vs English. Forced by
-   * `setupProfileBaseline` to `cs-CZ` so tests that switch the language
-   * (Jazyky) don't poison the next test run via the real backend's persisted
-   * preference.
+   * `setupProfileBaseline` to `cs-CZ` so i18n tests don't poison the next run
+   * via the backend's persisted preference.
    */
   preferredLocale: string;
 };
@@ -71,8 +55,7 @@ export type NotificationPreferences = {
 
 /**
  * Snapshot of the most recent mutation seen by `mockNotifications`. Exposed
- * so tests can assert exactly what the UI sent on a toggle click without
- * having to dig into untyped `unknown`s.
+ * so tests can assert exactly what the UI sent on a toggle click.
  */
 export type CapturedMutation = {
   operationName: string;
@@ -80,10 +63,7 @@ export type CapturedMutation = {
   rawBody: unknown;
 };
 
-/**
- * Behavior variants for `mockPasswordChange`. Mirrors the user-facing error
- * states the password-change form must handle.
- */
+/** Behavior variants for `mockPasswordChange`. Mirrors the user-facing error states. */
 export type PasswordChangeBehavior =
   | "success"
   | "wrong-current"
@@ -94,13 +74,7 @@ export type PasswordChangeBehavior =
 // Defaults — exported so tests can import and assert against them
 // ---------------------------------------------------------------------------
 
-/**
- * Default profile fixture — stable Czech-named test user.
- *
- * NOTE: `phone` was renamed to `phoneNumber` to match the real API key. The
- * UI formats the raw phone with spaces (`+44 7481 765995`) for display, so
- * the formatted form is also exported for assertion convenience.
- */
+/** Default profile fixture — stable Czech-named test user. */
 export const DEFAULT_USER: UserDetailsFixture = {
   firstName: "Test",
   lastName: "Testovaci",
@@ -110,9 +84,9 @@ export const DEFAULT_USER: UserDetailsFixture = {
 };
 
 /**
- * Human-formatted display values for assertions. The UI inserts spaces into
- * the phone number for legibility (`+44 7481 765995`). Tests should assert
- * on these formatted strings — they match what the user sees in the DOM.
+ * Human-formatted display values for assertions. UI inserts spaces into the
+ * phone number for legibility. Tests should assert on these formatted strings —
+ * they match what the user sees in the DOM.
  */
 export const DEFAULT_USER_DISPLAY = {
   fullName: `${DEFAULT_USER.firstName} ${DEFAULT_USER.lastName}`,
@@ -141,18 +115,13 @@ const URL_USER_VERIFICATION = "**/users/api/v1/userVerification";
 const URL_NOTIFICATIONS_GRAPHQL = "**/notifications/api/graphql";
 const URL_CORE_GRAPHQL = "**/core/api/graphql";
 const URL_USERS_GRAPHQL = "**/users/api/graphql";
-/**
- * Region-flexible RegExp pattern for the Cognito IDP endpoint. Matches any
- * AWS region (eu-west-1, us-east-1, etc.) so tests don't break when the
- * deployment moves regions or runs against a multi-region setup.
- */
+/** Region-flexible Cognito IDP pattern — works for any AWS region or multi-region setup. */
 const URL_COGNITO = /cognito-idp\.[a-z0-9-]+\.amazonaws\.com/;
 
 /**
  * Explicit list of password-change REST endpoints we hedge against. Listing
- * each candidate path explicitly (instead of `**\/users/api/**` + substring
- * filter) avoids accidentally swallowing unrelated requests and makes the
- * surface area auditable.
+ * each candidate explicitly (vs a broad glob + substring filter) avoids
+ * swallowing unrelated requests and makes the surface area auditable.
  */
 const PASSWORD_REST_CANDIDATES: readonly string[] = [
   "**/users/api/v1/users/password",
@@ -170,13 +139,9 @@ const THIRD_PARTY_BLOCKLIST: readonly string[] = [
 ];
 
 /**
- * Same as `THIRD_PARTY_BLOCKLIST` but WITHOUT any Intercom patterns. Used by
- * `setupProfileBaselineKeepingChat` for tests that need a working Intercom
- * messenger (e.g. chat-widget open/close tests in profile-chat.spec.ts).
- *
- * Kept in sync with `THIRD_PARTY_BLOCKLIST` by construction: we filter out
- * every entry whose pattern contains "intercom" (case-insensitive). If new
- * Intercom hosts are added to the main blocklist, they're auto-excluded here.
+ * Same as `THIRD_PARTY_BLOCKLIST` but without Intercom patterns. Used by
+ * `setupProfileBaselineKeepingChat` for chat-widget tests. Kept in sync by
+ * construction — any new Intercom hosts added to the main list are auto-excluded.
  */
 const THIRD_PARTY_BLOCKLIST_KEEPING_CHAT: readonly string[] =
   THIRD_PARTY_BLOCKLIST.filter((pattern) => !/intercom/i.test(pattern));
@@ -190,12 +155,8 @@ type GraphQLBody = {
 
 /**
  * Safely parse a route's JSON body. Returns null on any failure (no body,
- * malformed JSON, binary, or unexpected non-object shape). Tests assert
- * behavior, not parser internals.
- *
- * Handles Apollo's batched-request format (array of operations) by taking
- * the first entry — none of the mocks here support multi-operation batches
- * deliberately; tests would need explicit support added.
+ * malformed JSON, binary, or unexpected shape). Handles Apollo batched-request
+ * format by taking the first entry — multi-operation batches are not supported.
  */
 function readJsonBody(request: Request): GraphQLBody | null {
   const raw = request.postData();
@@ -229,8 +190,7 @@ function gqlSuccess(data: Record<string, unknown>): {
 
 /**
  * Standard Apollo-style GraphQL error envelope. Returned with HTTP 200 — the
- * GraphQL convention is to surface errors in the `errors` array rather than
- * via HTTP status.
+ * GraphQL convention is to surface errors in the `errors` array, not via status.
  */
 function gqlError(
   message: string,
@@ -251,14 +211,9 @@ function gqlError(
 // ---------------------------------------------------------------------------
 
 /**
- * Block third-party analytics / chat backend requests to keep tests fast and
- * deterministic. Call once per test (or in a beforeEach).
- *
- * BLOCKED: Exponea analytics, Intercom messenger backend, Google Analytics,
- *          Google Tag Manager.
- * NOT blocked: the Intercom chat button itself (it's part of the app bundle,
- *          not a separate request) and the d3jg1yk2sjabwp.cloudfront.net image
- *          CDN (we let images load for visual consistency).
+ * Block third-party analytics/chat backend requests to keep tests fast and
+ * deterministic. Blocks Exponea, Intercom backend, Google Analytics, GTM.
+ * Does NOT block the Intercom chat button (part of app bundle) or image CDN.
  */
 export async function blockThirdParty(page: Page): Promise<void> {
   await Promise.all(
@@ -269,13 +224,8 @@ export async function blockThirdParty(page: Page): Promise<void> {
 }
 
 /**
- * Same as `blockThirdParty` but leaves Intercom requests untouched, so the
- * chat widget can actually load. Use for tests in `profile-chat.spec.ts`
- * that exercise the Intercom messenger open/close flow.
- *
- * Why a separate helper rather than a flag on `blockThirdParty`? Keeping the
- * baseline behaviour immutable means existing tests (which assume Intercom
- * IS blocked) continue to pass unchanged — the new variant is purely additive.
+ * Like `blockThirdParty` but leaves Intercom requests untouched so the chat
+ * widget can load. Use for tests that exercise the Intercom messenger flow.
  */
 export async function blockThirdPartyKeepingChat(page: Page): Promise<void> {
   await Promise.all(
@@ -292,15 +242,9 @@ export async function blockThirdPartyKeepingChat(page: Page): Promise<void> {
 /**
  * Mock GET /users/api/v1/users/details by PATCHING the real response.
  *
- * The real response has many fields (level object, intercomUserHash*, etc.)
- * the app needs to render. Building a payload from scratch breaks the app
- * (we tried; it shows the "Ooops" error fallback because of missing fields).
- *
- * Strategy: forward the request to the real backend via `route.fetch()`,
- * then merge `override` keys on top of the returned body. Unspecified fields
- * stay at their real values. If override is empty, this is effectively a
- * pass-through (lets us keep `mockUserDetails(page)` as a no-op marker in
- * tests that don't need overrides).
+ * The real response has many fields the app needs to render. Building a payload
+ * from scratch breaks the app — we forward to the real backend via `route.fetch()`
+ * and merge `override` keys on top. Unspecified fields keep their real values.
  */
 export async function mockUserDetails(
   page: Page,
@@ -326,9 +270,8 @@ export async function mockUserDetails(
         body: JSON.stringify(patched),
       });
     } catch {
-      // If the real backend is unreachable, fall back to letting the request
-      // through unmodified — the alternative (synthesizing a payload) breaks
-      // the app, so this is the safer failure mode.
+      // If the real backend is unreachable, pass through unmodified — synthesizing
+      // a payload would break the app (missing required fields).
       await route.fallback();
     }
   });
@@ -337,12 +280,9 @@ export async function mockUserDetails(
 /**
  * Mock GET /users/api/v1/configuration/user-levels.
  *
- * Strategy: pass-through to the real backend. The real response has a complex
- * shape (premium tiers, translations, externalBenefits etc.) that the UI
- * depends on; building it from scratch is fragile and broke the app in
- * earlier iterations. Tests don't currently assert on level fields, so a
- * pass-through is sufficient. Kept as a function (not deleted) so the
- * baseline composition site stays readable and we can add patching later.
+ * Pass-through: real shape has premium tiers, translations, externalBenefits etc.
+ * that the UI depends on; building from scratch is fragile. Tests don't assert on
+ * level fields, so pass-through is sufficient. Kept as a function for future patching.
  */
 export async function mockUserLevels(page: Page): Promise<void> {
   await page.route(URL_USER_LEVELS, async (route: Route) => {
@@ -357,18 +297,9 @@ export async function mockUserLevels(page: Page): Promise<void> {
 /**
  * Mock GET /users/api/v1/userVerification.
  *
- * Strategy: pass-through to the real backend. The real shape is a flat record
- * of nullable KYC fields (pep, street, city, zip, personalIdentifier,
- * documentNumber, submitted, version, …). Building a payload from scratch
- * with the wrong keys (`status`, `verified`, `state`, `documents`) broke the
- * app's render — those keys don't exist on the real API. Tests in this suite
- * don't assert on verification fields directly; the section is read via the
- * personal-data renderer which reads from /users/details. Pass-through keeps
- * the boot flow working without us having to invent KYC data.
- *
- * Kept as a function (not deleted) so the baseline composition site stays
- * readable and so we can switch to "fetch real, patch override" later if
- * tests start needing to drive specific verification states.
+ * Pass-through: real shape is a flat record of nullable KYC fields. Building
+ * from scratch with the wrong keys broke the app's render. Kept as a function
+ * so we can switch to "fetch real, patch override" later if needed.
  */
 export async function mockUserVerification(page: Page): Promise<void> {
   await page.route(URL_USER_VERIFICATION, async (route: Route) => {
@@ -385,23 +316,40 @@ export async function mockUserVerification(page: Page): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
+ * The four category names the real Investown API exposes via
+ * `UserPreferences.categoryPreferences`. Captured live on 2026-05-20.
+ *
+ * Order matters: UI iterates over this array to render toggle rows. Missing any
+ * category causes every toggle to render as `disabled`. Keep in sync with live API.
+ */
+const ALL_CATEGORIES = [
+  "SummaryReports",
+  "ProfitNotifications",
+  "NewInvestmentOpportunities",
+  "NewsAndPersonalisedOffers",
+] as const;
+
+type CategoryName = (typeof ALL_CATEGORIES)[number];
+
+/** Single category entry in the GraphQL response. */
+type CategoryPreference = {
+  preferenceCategoryName: CategoryName;
+  email: boolean;
+  push: boolean;
+  sms: boolean;
+};
+
+/**
  * Mock POST /notifications/api/graphql.
  *
- * Behavior depends on the GraphQL operation:
- *   - Read/query operations return the current preferences state.
- *   - Mutation operations either succeed (echoing the merged state) or fail
- *     (depending on `opts.mutate`).
+ * Implements the real Investown GraphQL contract:
+ *   - `GetUserPreferences` query → full UserPreferences with all 4 categories.
+ *   - `PatchUserPreference` mutation → updates ONE category and returns the
+ *     full updated array under `data.patchUserPreference.categoryPreferences`.
  *
- * The returned `getLastMutation` closure exposes the most recent mutation
- * payload (variables + operationName) so tests can assert exactly what the
- * UI sent on toggle click.
- *
- * Assumed shapes (adjust if real captures differ):
- *   - Query operation name contains "Notification" or "Preferences".
- *   - Mutation operation name contains "Update", "Set", or "Save".
- *   - Response key matches `notificationPreferences` for queries and the
- *     mutation name for mutations — both wrapped in the standard
- *     { data: { ... } } envelope.
+ * Operation matching is EXACT — regex-based matching previously mistook the
+ * query for a mutation. Returns `getLastMutation` so tests can assert the
+ * exact payload sent on toggle click.
  */
 export async function mockNotifications(
   page: Page,
@@ -413,7 +361,21 @@ export async function mockNotifications(
   const mutateBehavior = opts.mutate ?? "success";
   let state: NotificationPreferences = {
     ...DEFAULT_NOTIFICATIONS,
-    ...(opts.initial ?? {}),
+    ...opts.initial,
+  };
+  // Push values aren't in the flat `NotificationPreferences` shape — tracked
+  // separately. Defaults mirror the live capture (all push=true).
+  const pushState: Record<CategoryName, boolean> = {
+    SummaryReports: true,
+    ProfitNotifications: true,
+    NewInvestmentOpportunities: true,
+    NewsAndPersonalisedOffers: true,
+  };
+  // ProfitNotifications has no representation in the flat shape but the UI/API
+  // still echo it. Track its email/sms separately so mutations don't drop.
+  const profitState: { email: boolean; sms: boolean } = {
+    email: false,
+    sms: false,
   };
   let lastMutation: CapturedMutation | null = null;
 
@@ -425,13 +387,18 @@ export async function mockNotifications(
     }
     const body = readJsonBody(request);
     const operationName = body?.operationName ?? "";
-    const isMutation =
-      /update|set|save|toggle|mutate/i.test(operationName) ||
-      /^\s*mutation\b/i.test(body?.query ?? "");
 
-    if (isMutation) {
-      // Capture mutation variables BEFORE deciding how to respond so error-path
-      // tests can still inspect what the UI sent.
+    if (operationName === "GetUserPreferences") {
+      await route.fulfill(
+        gqlSuccess({
+          UserPreferences: serializeState(state, pushState, profitState),
+        }),
+      );
+      return;
+    }
+
+    if (operationName === "PatchUserPreference") {
+      // Capture BEFORE deciding the response so error-path tests can still inspect.
       lastMutation = {
         operationName,
         variables: body?.variables ?? null,
@@ -447,39 +414,21 @@ export async function mockNotifications(
         return;
       }
 
-      // Merge whatever boolean preference values the UI sent into our state
-      // (used to re-render the next query). We do NOT forward the mutation to
-      // the real backend — we don't want to mutate the shared test account.
-      state = mergeMutationVariables(state, body?.variables);
+      applyMutationInput(state, pushState, profitState, body?.variables);
+      const serialized = serializeState(state, pushState, profitState);
       await route.fulfill(
         gqlSuccess({
-          [operationName || "updateNotificationPreferences"]: {
-            success: true,
+          patchUserPreference: {
+            categoryPreferences: serialized.categoryPreferences,
           },
         }),
       );
       return;
     }
 
-    // Query: fetch the real GraphQL response and patch our preferences onto
-    // its `data.UserPreferences` node. The previous strategy (fabricating
-    // `{ notificationPreferences: ... }`) broke the page because the real
-    // response key is `UserPreferences` and the inner shape is nested
-    // (`categoryPreferences` array, not flat booleans).
-    try {
-      const realResponse = await route.fetch();
-      const real = (await realResponse.json()) as Record<string, unknown>;
-      const patched = applyPreferencesToRealShape(real, state);
-      await route.fulfill({
-        status: realResponse.status(),
-        contentType: "application/json",
-        body: JSON.stringify(patched),
-      });
-    } catch {
-      // Real backend unreachable — fall through. Better than synthesizing a
-      // wrong shape, which is what the original implementation did.
-      await route.fallback();
-    }
+    // Unknown operation — fall back to real backend so we don't break new
+    // features that haven't been mocked yet.
+    await route.fallback();
   });
 
   return {
@@ -488,108 +437,135 @@ export async function mockNotifications(
 }
 
 /**
- * Merge boolean preference fields from mutation variables into the current
- * state. Looks for keys at the top of `variables`, under `variables.input`,
- * and under `variables.prefs`. Unknown / non-boolean values are ignored.
- */
-function mergeMutationVariables(
-  current: NotificationPreferences,
-  variables: Record<string, unknown> | undefined | null,
-): NotificationPreferences {
-  if (!variables || typeof variables !== "object") return current;
-  const candidates: Array<Record<string, unknown>> = [variables];
-  const input = variables["input"];
-  if (input && typeof input === "object") {
-    candidates.push(input as Record<string, unknown>);
-  }
-  const prefs = variables["prefs"];
-  if (prefs && typeof prefs === "object") {
-    candidates.push(prefs as Record<string, unknown>);
-  }
-
-  const next: NotificationPreferences = { ...current };
-  const keys: Array<keyof NotificationPreferences> = [
-    "emailMaster",
-    "emailNews",
-    "emailOpportunities",
-    "emailSummaries",
-    "smsMaster",
-    "smsNews",
-  ];
-  for (const candidate of candidates) {
-    for (const key of keys) {
-      const value = candidate[key];
-      if (typeof value === "boolean") {
-        next[key] = value;
-      }
-    }
-  }
-  return next;
-}
-
-/**
- * Map our flat `NotificationPreferences` onto the real Apollo response object
- * captured from /notifications/api/graphql (key `data.UserPreferences`).
+ * Serialize internal state to the shape the UI expects from `data.UserPreferences`.
+ * Returns a fresh object each call (no shared refs) so route handlers can't mutate it.
  *
- * Returns a deep clone with the override booleans applied. Validated against
- * the live response (2026-05-20):
+ * Field mapping:
+ *   emailMaster/smsMaster → top-level *NotificationsEnabled
+ *   emailSummaries        → SummaryReports.email
+ *   emailOpportunities    → NewInvestmentOpportunities.email
+ *   emailNews/smsNews     → NewsAndPersonalisedOffers.email/sms
+ *   push values           → pushState (per-category)
+ *   ProfitNotifications   → profitState (no flat-shape representation)
  *
- *   emailMaster        → data.UserPreferences.emailNotificationsEnabled
- *   smsMaster          → data.UserPreferences.smsNotificationsEnabled
- *   emailSummaries     → categoryPreferences[name=SummaryReports].email
- *   emailOpportunities → categoryPreferences[name=NewInvestmentOpportunities].email
- *   emailNews          → categoryPreferences[name=NewsAndPersonalisedOffers].email
- *   smsNews            → categoryPreferences[name=NewsAndPersonalisedOffers].sms
- *
- * If a category goes missing in a future API revision, the override is
- * silently dropped — UI assertions will then fail loudly, which is the
- * correct signal.
+ * `pushNotificationsEnabled` is hard-coded true (no master-push field in the flat shape).
  */
-function applyPreferencesToRealShape(
-  real: Record<string, unknown>,
-  prefs: NotificationPreferences,
-): Record<string, unknown> {
-  // Deep clone so we never mutate the input — multiple route handlers can
-  // share the same response object reference.
-  const cloned = structuredClone(real);
-  const data = cloned["data"];
-  if (!data || typeof data !== "object") return cloned;
-  const userPrefs = (data as Record<string, unknown>)["UserPreferences"];
-  if (!userPrefs || typeof userPrefs !== "object") return cloned;
-  const up = userPrefs as Record<string, unknown>;
-
-  up["emailNotificationsEnabled"] = prefs.emailMaster;
-  up["smsNotificationsEnabled"] = prefs.smsMaster;
-
-  patchCategoryPreferences(up["categoryPreferences"], prefs);
-  return cloned;
-}
-
-/**
- * Walk the real `categoryPreferences` array and apply per-category overrides
- * in-place. Defensive: any malformed entry is skipped. Extracted to keep the
- * main `applyPreferencesToRealShape` body small enough for the cognitive-
- * complexity rule.
- */
-function patchCategoryPreferences(
-  cats: unknown,
-  prefs: NotificationPreferences,
-): void {
-  if (!Array.isArray(cats)) return;
-  const overrides: Record<string, { email?: boolean; sms?: boolean }> = {
-    SummaryReports: { email: prefs.emailSummaries },
-    NewInvestmentOpportunities: { email: prefs.emailOpportunities },
-    NewsAndPersonalisedOffers: { email: prefs.emailNews, sms: prefs.smsNews },
+function serializeState(
+  state: NotificationPreferences,
+  pushState: Record<CategoryName, boolean>,
+  profitState: { email: boolean; sms: boolean },
+): {
+  emailNotificationsEnabled: boolean;
+  pushNotificationsEnabled: boolean;
+  smsNotificationsEnabled: boolean;
+  categoryPreferences: CategoryPreference[];
+} {
+  const emailByCategory: Record<CategoryName, boolean> = {
+    SummaryReports: state.emailSummaries,
+    ProfitNotifications: profitState.email,
+    NewInvestmentOpportunities: state.emailOpportunities,
+    NewsAndPersonalisedOffers: state.emailNews,
   };
-  for (const cat of cats) {
-    if (typeof cat !== "object" || cat === null) continue;
-    const c = cat as Record<string, unknown>;
-    const name = c["preferenceCategoryName"];
-    if (typeof name !== "string") continue;
-    const override = overrides[name];
-    if (!override) continue;
-    if (typeof override.email === "boolean") c["email"] = override.email;
-    if (typeof override.sms === "boolean") c["sms"] = override.sms;
+  const smsByCategory: Record<CategoryName, boolean> = {
+    SummaryReports: false,
+    ProfitNotifications: profitState.sms,
+    NewInvestmentOpportunities: false,
+    NewsAndPersonalisedOffers: state.smsNews,
+  };
+  return {
+    emailNotificationsEnabled: state.emailMaster,
+    pushNotificationsEnabled: true,
+    smsNotificationsEnabled: state.smsMaster,
+    categoryPreferences: ALL_CATEGORIES.map((name) => ({
+      preferenceCategoryName: name,
+      email: emailByCategory[name],
+      push: pushState[name],
+      sms: smsByCategory[name],
+    })),
+  };
+}
+
+/**
+ * Apply a `PatchUserPreference` mutation's `variables.input` to internal state.
+ * Mutates state objects in place — the caller (closure in `mockNotifications`)
+ * owns their lifecycle across many route invocations.
+ */
+function applyMutationInput(
+  state: NotificationPreferences,
+  pushState: Record<CategoryName, boolean>,
+  profitState: { email: boolean; sms: boolean },
+  variables: Record<string, unknown> | undefined | null,
+): void {
+  if (!variables || typeof variables !== "object") return;
+  const input = variables["input"];
+  if (!input || typeof input !== "object") return;
+  const inp = input as Record<string, unknown>;
+  const name = inp["preferenceCategoryName"];
+  if (typeof name !== "string") return;
+  if (!isCategoryName(name)) return;
+
+  const email = inp["email"];
+  const push = inp["push"];
+  const sms = inp["sms"];
+
+  if (typeof push === "boolean") {
+    pushState[name] = push;
+  }
+  if (typeof email === "boolean") {
+    applyEmailUpdate(state, profitState, name, email);
+  }
+  if (typeof sms === "boolean") {
+    applySmsUpdate(state, profitState, name, sms);
+  }
+}
+
+/** Type guard for the four known category names. */
+function isCategoryName(name: string): name is CategoryName {
+  return (ALL_CATEGORIES as readonly string[]).includes(name);
+}
+
+/** Apply a per-category email update to the right internal field. */
+function applyEmailUpdate(
+  state: NotificationPreferences,
+  profitState: { email: boolean; sms: boolean },
+  name: CategoryName,
+  value: boolean,
+): void {
+  switch (name) {
+    case "SummaryReports":
+      state.emailSummaries = value;
+      return;
+    case "NewInvestmentOpportunities":
+      state.emailOpportunities = value;
+      return;
+    case "NewsAndPersonalisedOffers":
+      state.emailNews = value;
+      return;
+    case "ProfitNotifications":
+      profitState.email = value;
+      return;
+  }
+}
+
+/** Apply a per-category sms update to the right internal field. */
+function applySmsUpdate(
+  state: NotificationPreferences,
+  profitState: { email: boolean; sms: boolean },
+  name: CategoryName,
+  value: boolean,
+): void {
+  switch (name) {
+    case "NewsAndPersonalisedOffers":
+      state.smsNews = value;
+      return;
+    case "ProfitNotifications":
+      profitState.sms = value;
+      return;
+    case "SummaryReports":
+    case "NewInvestmentOpportunities":
+      // Live API exposes sms=false on these; UI doesn't render an SMS toggle
+      // for them. Silently drop if the mutation arrives with one.
+      return;
   }
 }
 
@@ -598,38 +574,28 @@ function patchCategoryPreferences(
 // ---------------------------------------------------------------------------
 
 /**
- * Mock password change with the given behavior. We hedge across three
- * possible call sites — whichever the app actually hits gets the mocked
- * response; the others sit idle.
+ * Mock password change with the given behavior. We hedge across four possible
+ * call sites since the app's actual endpoint wasn't observable in initial mapping —
+ * whichever the app hits gets mocked; the others sit idle.
  *
  * Hedged endpoints:
- *   1. REST POST to one of the explicit `PASSWORD_REST_CANDIDATES` paths
- *      (e.g. `/users/api/v1/users/password`, `/users/api/v1/users/change-password`).
- *   2. GraphQL `**\/core/api/graphql` POST with operationName containing
- *      "Password" (e.g. `ChangePassword`, `UpdatePassword`).
- *   3. GraphQL `**\/users/api/graphql` POST with operationName containing
- *      "Password" — kept for the case where password mutations live under
- *      the users service rather than core.
- *   4. Cognito direct POST to any `cognito-idp.<region>.amazonaws.com` host
- *      with header `X-Amz-Target` containing `ChangePassword`. AWS Amplify
- *      apps frequently call this endpoint directly from the browser; the
- *      region is matched permissively so multi-region setups still work.
+ *   1. REST POST to any `PASSWORD_REST_CANDIDATES` path.
+ *   2. GraphQL `core/api/graphql` POST with operationName matching /password/i.
+ *   3. GraphQL `users/api/graphql` POST with operationName matching /password/i.
+ *   4. Cognito direct POST with header `X-Amz-Target` containing `ChangePassword`
+ *      (AWS Amplify apps often call this directly from the browser).
  *
- * Error shapes:
- *   - REST: HTTP 400 with `{ code, message }` body.
+ * Error shapes per transport:
+ *   - REST: HTTP 4xx with `{ code, message }`.
  *   - GraphQL: HTTP 200 with `errors[]` (Apollo convention).
- *   - Cognito: HTTP 400 with `__type` matching the failure code (Cognito's
- *     standard error envelope).
+ *   - Cognito: HTTP 400 with `__type` matching the failure code.
  */
 export async function mockPasswordChange(
   page: Page,
   behavior: PasswordChangeBehavior,
 ): Promise<void> {
-  // Register each explicit REST candidate path. We previously used a broad
-  // `**\/users/api/**` glob + URL substring check, but that risked intercepting
-  // unrelated user-API requests and made the surface area opaque. Listing
-  // candidate paths explicitly is auditable and lets `page.route()` matching
-  // do the filtering.
+  // Explicit path list (vs broad glob + substring filter) keeps the surface area
+  // auditable and lets page.route() matching do the filtering.
   await Promise.all(
     PASSWORD_REST_CANDIDATES.map((pattern) =>
       page.route(pattern, async (route: Route) => {
@@ -799,13 +765,10 @@ function cognitoPasswordResponse(behavior: PasswordChangeBehavior): {
  * Apply the baseline mocks for any /user/* test:
  *   - block third-party noise
  *   - mock user details (forces `preferredLocale = cs-CZ` so the UI renders
- *     in Czech regardless of what the previous test session left behind in
- *     the real backend — i18n tests can flip the language by clicking the
- *     radio without polluting later tests)
- *   - mock user levels and verification (pass-through; see helpers)
+ *     in Czech regardless of backend state — i18n tests can flip at runtime)
+ *   - mock user levels and verification (pass-through)
  *
- * Tests can layer additional mocks (notifications, password-change) on top
- * by calling the dedicated helpers after this one.
+ * Tests can layer additional mocks on top by calling dedicated helpers after this.
  */
 export async function setupProfileBaseline(page: Page): Promise<void> {
   await blockThirdParty(page);
@@ -815,22 +778,15 @@ export async function setupProfileBaseline(page: Page): Promise<void> {
 }
 
 /**
- * Like `setupProfileBaseline` but does NOT block Intercom backend calls — the
- * chat widget can load and the messenger can open. All other baseline mocks
- * (user details, levels, verification, non-Intercom third-party blocking) are
- * applied identically so tests still get a deterministic profile state.
- *
- * Use this in `profile-chat.spec.ts` (or any test that needs to assert against
- * the live Intercom messenger). Do NOT use this for tests that DON'T touch the
- * chat — those should keep using `setupProfileBaseline` for maximum determinism
- * (the live Intercom backend introduces a remote-network dependency).
+ * Like `setupProfileBaseline` but does NOT block Intercom — the chat widget
+ * can load. All other baseline mocks are applied identically. Use only for
+ * tests that need the live Intercom messenger; others should prefer
+ * `setupProfileBaseline` for maximum determinism.
  */
 export async function setupProfileBaselineKeepingChat(
   page: Page,
 ): Promise<void> {
   await blockThirdPartyKeepingChat(page);
-  // Same locale lock as setupProfileBaseline — chat tests should also see
-  // Czech UI regardless of the real backend's stored preference.
   await mockUserDetails(page, { preferredLocale: "cs-CZ" });
   await mockUserLevels(page);
   await mockUserVerification(page);

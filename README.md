@@ -46,7 +46,7 @@ End-to-end coverage of the account portal (8 sub-sections under `/user/*`). Sing
 | Změna hesla   | `/user/password-change` | 5     | RHF blur, wrong-current, same-as-current      |
 | Dvoufaktorové | `/user/mfa`             | 1     | Inactive badge, Aktivovat button trigger only |
 | Podpora       | `/user/support`         | 1     | Chat trigger + `support@investown.cz` link    |
-| Auth + nav    | all `/user/*`           | 2     | Logout + deep-link auth guard                 |
+| Auth + nav    | all `/user/*`           | 3     | Logout + deep-link auth guard + back-button   |
 
 Tag split: `@positive` (happy paths), `@negative` (error states from mocked APIs), `@edge` (RHF blur, error revert), `@security` (auth guard, wrong current, same-as-current).
 
