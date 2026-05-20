@@ -11,15 +11,28 @@ export class SignInPage {
 
   constructor(page: Page) {
     this.page = page;
-    this.heading = page.getByRole("heading", { name: "Log in to Investown" });
-    this.emailInput = page.getByRole("textbox", { name: "E-mail address" });
-    this.passwordInput = page.getByRole("textbox", { name: "Password" });
-    this.logInButton = page.getByRole("button", { name: "Login" });
+    // Bilingual matchers — Investown UI flips between EN ("Log in to Investown")
+    // and CZ ("Přihlásit se do Investownu") based on account preferredLocale.
+    // We accept both so the suite works against accounts in either language.
+    this.heading = page.getByRole("heading", {
+      name: /Log in to Investown|Přihlásit se do Investownu/i,
+    });
+    this.emailInput = page.getByRole("textbox", {
+      name: /E-mail address|E-mail/i,
+    });
+    this.passwordInput = page.getByRole("textbox", {
+      name: /Password|Heslo/i,
+    });
+    this.logInButton = page.getByRole("button", {
+      name: /^(Login|Přihlásit se)$/i,
+    });
     this.forgotPasswordLink = page.getByRole("link", {
-      name: "Forgotten password",
+      name: /Forgotten password|Zapomenuté heslo/i,
     });
     // Verified via Walk & Watch — exact copy shown on bad credentials.
-    this.errorMessage = page.getByText("Invalid e-mail or password");
+    this.errorMessage = page.getByText(
+      /Invalid e-mail or password|Neplatný e-mail nebo heslo/i,
+    );
   }
 
   async navigate(): Promise<void> {
@@ -30,7 +43,7 @@ export class SignInPage {
   /** Dismiss mobile-app interstitial. Waits up to 5s for prompt; skips if not shown. */
   private async dismissMobileAppPrompt(): Promise<void> {
     const continueButton = this.page.getByRole("button", {
-      name: "Continue in the browser",
+      name: /Continue in the browser|Pokračovat v prohlížeči/i,
     });
     try {
       await continueButton.waitFor({ state: "visible", timeout: 5_000 });

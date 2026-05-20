@@ -8,10 +8,16 @@ export class ForgotPasswordPage {
 
   constructor(page: Page) {
     this.page = page;
-    // All selectors verified via Walk & Watch DOM snapshot — exact strings only.
-    this.heading = page.getByRole("heading", { name: "Forgot your password?" });
-    this.emailInput = page.getByRole("textbox", { name: "E-mail address" });
-    this.submitButton = page.getByRole("button", { name: "Send a link" });
+    // Bilingual matchers — UI flips between EN and CZ based on account locale.
+    this.heading = page.getByRole("heading", {
+      name: /Forgot your password\?|Zapomněli jste heslo\?/i,
+    });
+    this.emailInput = page.getByRole("textbox", {
+      name: /E-mail address|E-mail/i,
+    });
+    this.submitButton = page.getByRole("button", {
+      name: /Send a link|Odeslat odkaz/i,
+    });
   }
 
   async navigate(): Promise<void> {
@@ -22,7 +28,7 @@ export class ForgotPasswordPage {
   /** Dismiss mobile-app interstitial. Waits up to 5s for prompt; skips if not shown. */
   private async dismissMobileAppPrompt(): Promise<void> {
     const continueButton = this.page.getByRole("button", {
-      name: "Continue in the browser",
+      name: /Continue in the browser|Pokračovat v prohlížeči/i,
     });
     try {
       await continueButton.waitFor({ state: "visible", timeout: 5_000 });

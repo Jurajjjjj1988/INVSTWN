@@ -6,6 +6,9 @@ import { TEST_DATA } from "../data/test-data.js";
 
 const EMAIL = TEST_DATA.SIGN_UP.EMAIL;
 
+// Password-reset tests must run UNAUTHENTICATED — flow starts at /sign-in.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 test.describe("Password reset", () => {
   // Serial — mutates shared seed account (password + single-use reset code).
   test.describe.configure({ mode: "serial" });

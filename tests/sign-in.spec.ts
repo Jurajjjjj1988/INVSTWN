@@ -4,6 +4,12 @@ import { loadCurrentPassword } from "../helpers/credentials.js";
 
 const EMAIL = TEST_DATA.SIGN_UP.EMAIL;
 
+// Sign-in tests must run UNAUTHENTICATED. globalSetup writes a logged-in
+// storageState to .auth/user.json which every test inherits by default —
+// here we override with an empty session so /sign-in actually shows the form
+// instead of redirecting to the dashboard.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 test.describe("Sign in", () => {
   // Serial — valid + wrong-password tests share the seed account, and Investown
   // rate-limits login attempts per account.

@@ -1,6 +1,9 @@
 import { test, expect } from "../fixtures/pages.fixture.js";
 import { waitForEmail } from "../helpers/mailsac.js";
 
+// Forgot-password tests must run UNAUTHENTICATED — see sign-in.spec.ts comment.
+test.use({ storageState: { cookies: [], origins: [] } });
+
 test.describe("Forgot password — negative & security", () => {
   test(
     "empty email submit stays on forgotten-password (no progress)",
