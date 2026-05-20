@@ -72,7 +72,7 @@ All backend calls are intercepted via `page.route()` and fulfilled from `data/pr
 
 `auth-setup.ts` runs **once** as `globalSetup` — real UI login against `dev.investown.net`, storage state saved to `.auth/user.json`. Every profile test inherits it via `use: { storageState: '.auth/user.json' }` and skips the sign-in screen entirely.
 
-Why this matters for the 2-min budget: UI login takes ~10s (RHF onBlur + redirect). Doing it once instead of 16× keeps the whole profile spec under ~90s on CI with 2 workers.
+Why this matters for the 2-min budget: UI login takes ~10s (RHF onBlur + redirect). Doing it once instead of 16× keeps the whole profile spec under ~90s on CI with 4 workers.
 
 ### Constraints honored
 
@@ -198,14 +198,14 @@ auth/             [GITIGNORED] Persisted current password between runs
 `playwright.config.ts` runs tests in parallel by default:
 
 - `fullyParallel: true` — tests across `describe` blocks / spec files run in parallel.
-- `workers` — auto-detected locally (one per CPU core); CI uses 2.
+- `workers` — auto-detected locally (one per CPU core); CI uses 4.
 - **`tests/password-reset.spec.ts` + `tests/sign-in.spec.ts` opt into serial mode** via `test.describe.configure({ mode: "serial" })` — both share the single seed account. Sign-in's valid + wrong-password tests would race Investown's per-account login rate-limit if parallel.
 - Other spec files run in parallel automatically.
 
 ## CI considerations
 
 - `auth/current-password.json` is **gitignored** — CI must run `password-reset.spec.ts` BEFORE `sign-in.spec.ts` (or seed the auth file from a secret).
-- Default `workers: 2` in CI (env `CI=true`) — single shared test account limits horizontal scaling.
+- Default `workers: 4` in CI (env `CI=true`) — bumped from 2 to fit 2-min budget; single shared test account limits horizontal scaling beyond that.
 - Investown rate-limits password reset requests; full suite run typically takes 2–3 min.
 
 ## References

@@ -88,8 +88,10 @@ jobs:
 
       # Always run install so system deps (--with-deps) are present even on
       # cache hit; browser binaries themselves are skipped if already cached.
-      - name: Install Playwright Chromium + system deps
-        run: npx playwright install chromium --with-deps
+      # `chrome` (not `chromium`) — playwright.config.ts pins channel: "chrome"
+      # because Investown reCaptcha v3 detects bundled Chromium fingerprints.
+      - name: Install Playwright Chrome + system deps
+        run: npx playwright install chrome --with-deps
 
       - name: Run Playwright tests
         env:

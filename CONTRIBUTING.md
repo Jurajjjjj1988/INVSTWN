@@ -89,7 +89,7 @@ Example: add a test that checks the "Languages" toggle on `/user/languages` is h
 `.github/workflows/e2e.yml` runs on every PR to `main` and on every push to `main`. Two jobs:
 
 - **`typecheck`** — `npm ci` + `npm run typecheck` (`playwright test --list`). ~30s. Catches type errors before browsers boot.
-- **`e2e`** — depends on `typecheck`. Installs Chromium (cached), runs `npm test` with `CI=true` (which sets `workers: 2`). Uploads `playwright-report/` on every run, `test-results/` (traces, screenshots, videos) only on failure.
+- **`e2e`** — depends on `typecheck`. Installs Chrome (cached), runs `npm test` with `CI=true` (which sets `workers: 4`). Uploads `playwright-report/` on every run, `test-results/` (traces, screenshots, videos) only on failure.
 
 **Required GitHub secrets** (`Settings -> Secrets and variables -> Actions`):
 
