@@ -450,6 +450,23 @@ test.describe("Profile — Změna hesla", () => {
   );
 
   test(
+    "weak password violating policy shows error",
+    { tag: ["@negative", "@password", "@validation"] },
+    async ({ page, profilePage }) => {
+      // Uses the PASSWORD_SCENARIOS "policy-violation" entry — mocks Cognito
+      // InvalidPasswordException so we don't depend on the real backend's
+      // current policy rules (which can shift without notice).
+      await mockPasswordChange(page, "policy-violation");
+
+      await profilePage.gotoSection("passwordChange");
+
+      await profilePage.submitPasswordChange("OldPassword123!", "weak", "weak");
+
+      await expect(profilePage.password.errorMessage).toBeVisible();
+    },
+  );
+
+  test(
     "password fields use type=password (no plaintext in DOM)",
     { tag: ["@positive", "@security", "@password"] },
     async ({ profilePage }) => {
