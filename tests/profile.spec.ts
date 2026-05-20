@@ -7,8 +7,7 @@ import {
   DEFAULT_NOTIFICATIONS,
 } from "../data/profile-mocks.js";
 import type { CapturedMutation } from "../data/profile-mocks.js";
-import { TEST_DATA } from "../data/test-data.js";
-import { loadCurrentPassword } from "../helpers/credentials.js";
+import { refreshSessionIfNeeded } from "../helpers/session.js";
 
 /**
  * E2E coverage for the Investown /user (profile) section.
@@ -474,9 +473,11 @@ test.describe("Profile — Změna hesla", () => {
   test(
     "language switch does not corrupt password form state",
     { tag: ["@positive", "@edge", "@i18n", "@password"] },
-    async ({ profilePage }) => {
-      // Routing away from a partially-filled form and back must leave coherent state (empty OR preserved).
+    async ({ page, profilePage, signInPage }) => {
+      // Flaky in long runs: this test sits late in the @password block and the
+      // 5-min Cognito JWT can expire before the first navigation lands.
       await profilePage.gotoSection("passwordChange");
+      await refreshSessionIfNeeded(page, signInPage);
 
       // Partial fill: 2 of 3 fields.
       await profilePage.fillCurrentPassword("PartialFill1!");
@@ -693,13 +694,8 @@ test.describe("Profile — Auth", () => {
       // takes longer than that, the token is rejected and /user redirects to
       // /sign-in. Re-authenticate UI-flow so this test stays self-contained
       // without relying on a fresh global session.
-      if (page.url().includes("/sign-in")) {
-        await signInPage.login(TEST_DATA.SIGN_UP.EMAIL, loadCurrentPassword());
-        await page.waitForURL((url) => !url.pathname.includes("/sign-in"), {
-          timeout: 15_000,
-        });
-        await profilePage.gotoSection("personalData");
-      }
+      await refreshSessionIfNeeded(page, signInPage);
+      await profilePage.gotoSection("personalData");
 
       await expect(profilePage.personalData.heading).toBeVisible();
 
