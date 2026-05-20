@@ -42,10 +42,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
+      - name: Setup Node.js 22 (LTS)
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           # Built-in npm cache keyed off package-lock.json - faster than manual cache.
           cache: npm
 
@@ -65,10 +65,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
+      - name: Setup Node.js 22 (LTS)
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
 
       - name: Install dependencies
@@ -92,6 +92,26 @@ jobs:
       # because Investown reCaptcha v3 detects bundled Chromium fingerprints.
       - name: Install Playwright Chrome + system deps
         run: npx playwright install chrome --with-deps
+
+      # Fail fast with a clear message if required secrets aren't configured
+      # in the repo. Without this, globalSetup fails later with a cryptic
+      # "Cannot navigate to invalid URL" because page.goto sees baseURL=undefined.
+      - name: Verify required secrets are present
+        env:
+          BASE_URL: ${{ secrets.BASE_URL }}
+          INVESTOWN_EMAIL: ${{ secrets.INVESTOWN_EMAIL }}
+          INVESTOWN_PASSWORD: ${{ secrets.INVESTOWN_PASSWORD }}
+          MAILSAC_API_KEY: ${{ secrets.MAILSAC_API_KEY }}
+        run: |
+          missing=""
+          for var in BASE_URL INVESTOWN_EMAIL INVESTOWN_PASSWORD MAILSAC_API_KEY; do
+            if [ -z "${!var}" ]; then missing="$missing $var"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required GitHub secrets:$missing"
+            echo "::error::Configure them in Settings → Secrets and variables → Actions"
+            exit 1
+          fi
 
       - name: Run Playwright tests
         env:

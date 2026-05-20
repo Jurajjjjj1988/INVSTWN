@@ -22,7 +22,26 @@ const SIGN_IN_REDIRECT_TIMEOUT_MS = 20_000;
  * dashboard ("/") and the "Last step" SMS 2FA page. Both prove credentials were
  * accepted; that's all storage state needs.
  */
+/** Required env vars for globalSetup to even start. Listed here so the
+ * error message points at the EXACT missing key instead of failing later
+ * with a cryptic "Cannot navigate to invalid URL" when baseURL is unset. */
+const REQUIRED_ENV = [
+  "BASE_URL",
+  "INVESTOWN_EMAIL",
+  "INVESTOWN_PASSWORD",
+] as const;
+
 async function globalSetup(_config: FullConfig): Promise<void> {
+  const missing = REQUIRED_ENV.filter((k) => !process.env[k]);
+  if (missing.length > 0) {
+    throw new Error(
+      `globalSetup: missing required env vars: ${missing.join(", ")}.\n` +
+        `Locally: copy .env.example to .env and fill them in.\n` +
+        `In CI: set them under Settings → Secrets and variables → Actions ` +
+        `(see CONTRIBUTING.md "Required GitHub secrets").`,
+    );
+  }
+
   const storagePath = ".auth/user.json";
   mkdirSync(dirname(storagePath), { recursive: true });
 
