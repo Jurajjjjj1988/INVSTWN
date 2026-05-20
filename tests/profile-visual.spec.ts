@@ -34,7 +34,12 @@ import {
  *   npx playwright test profile-visual.spec.ts --update-snapshots
  */
 
+// @slow — snapshots are OS-specific. CI (Linux) needs separate baselines
+// from local darwin. Generate via `npm run test:slow -- --update-snapshots`
+// on the target OS, then commit the .png files.
 test.describe("Profile — Visual regression", () => {
+  test.describe.configure({ tag: "@slow" });
+
   test(
     "personal data section",
     { tag: ["@visual", "@profile"] },
