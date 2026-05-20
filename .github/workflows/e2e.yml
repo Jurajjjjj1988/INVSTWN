@@ -123,7 +123,10 @@ jobs:
           INVESTOWN_FIRST_NAME: TESTER
           INVESTOWN_LAST_NAME: TEST
           MAILSAC_API_KEY: ${{ secrets.MAILSAC_API_KEY }}
-          INVESTOWN_COGNITO_CLIENT_ID: ${{ secrets.INVESTOWN_COGNITO_CLIENT_ID }}
+          # Cognito ClientId is a public AWS Amplify identifier (visible in
+          # browser network tab) — inline rather than a secret. Same as
+          # INVESTOWN_COGNITO_URL below.
+          INVESTOWN_COGNITO_CLIENT_ID: 7q7njcm8mdgr3rjkjrspc7t3fj
           INVESTOWN_COGNITO_URL: https://cognito-idp.eu-west-1.amazonaws.com/
         run: npm test
 
