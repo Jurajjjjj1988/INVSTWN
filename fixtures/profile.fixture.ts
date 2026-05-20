@@ -53,15 +53,18 @@ type ProfileFixtures = {
 export const test = base.extend<ProfileFixtures>({
   _profileBaseline: [
     async ({ page }, use) => {
-      // Register the baseline route handlers BEFORE the test body executes.
-      // This is the whole point of moving to a fixture: previously each test
-      // called `await setupProfileBaseline(page)` inside `beforeEach`, which
-      // worked but relied on developers (a) remembering the call and (b) not
-      // accidentally re-ordering it after the first `page.goto(...)`. Both
-      // failure modes are now impossible from inside a test body.
+      // Fast-mode: block fonts only (saves ~80ms/test, no DOM impact) and
+      // disable CSS animations (saves ~200ms/test on transitions).
+      // Image/SVG block was tried but broke assertions that depend on icon
+      // visibility (notification toggles render SVGs we don't want to abort).
+      await page.route(/\.(woff2?|ttf|otf)(\?|$)/i, (route) => route.abort());
+      await page.addInitScript(() => {
+        const style = document.createElement("style");
+        style.textContent = `*,*::before,*::after{animation-duration:0ms!important;animation-delay:0ms!important;transition-duration:0ms!important;transition-delay:0ms!important;}`;
+        document.head.appendChild(style);
+      });
       await setupProfileBaseline(page);
       await use();
-      // No teardown — see file-level note.
     },
     { auto: true },
   ],
