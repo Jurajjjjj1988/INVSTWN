@@ -12,8 +12,9 @@ import type { Page, Route, Request } from "@playwright/test";
  * use `**` wildcards so they match regardless of protocol/subdomain quirks.
  *
  * GraphQL responses follow Apollo standard envelope ({ data, errors }).
- * Password change endpoint is hedged across REST, GraphQL, and Cognito direct
- * (the app's actual call site wasn't observable in initial mapping).
+ * Password change is a Cognito-direct call from the AWS Amplify SDK — verified
+ * live on 2026-05-20 via DevTools (POST cognito-idp.<region>.amazonaws.com with
+ * header `X-Amz-Target: AWSCognitoIdentityProviderService.ChangePassword`).
  */
 
 // ---------------------------------------------------------------------------
@@ -113,22 +114,8 @@ const URL_USER_DETAILS = "**/users/api/v1/users/details";
 const URL_USER_LEVELS = "**/users/api/v1/configuration/user-levels";
 const URL_USER_VERIFICATION = "**/users/api/v1/userVerification";
 const URL_NOTIFICATIONS_GRAPHQL = "**/notifications/api/graphql";
-const URL_CORE_GRAPHQL = "**/core/api/graphql";
-const URL_USERS_GRAPHQL = "**/users/api/graphql";
 /** Region-flexible Cognito IDP pattern — works for any AWS region or multi-region setup. */
 const URL_COGNITO = /cognito-idp\.[a-z0-9-]+\.amazonaws\.com/;
-
-/**
- * Explicit list of password-change REST endpoints we hedge against. Listing
- * each candidate explicitly (vs a broad glob + substring filter) avoids
- * swallowing unrelated requests and makes the surface area auditable.
- */
-const PASSWORD_REST_CANDIDATES: readonly string[] = [
-  "**/users/api/v1/users/password",
-  "**/users/api/v1/users/change-password",
-  "**/users/api/v1/auth/change-password",
-  "**/users/api/v1/password",
-];
 
 const THIRD_PARTY_BLOCKLIST: readonly string[] = [
   "**/api.eu1.exponea.com/**",
@@ -570,60 +557,82 @@ function applySmsUpdate(
 }
 
 // ---------------------------------------------------------------------------
-// Password change mock — hedged across REST, GraphQL, and Cognito direct
+// Password change mock — Cognito direct (verified via DevTools 2026-05-20)
 // ---------------------------------------------------------------------------
 
 /**
- * Mock password change with the given behavior. We hedge across four possible
- * call sites since the app's actual endpoint wasn't observable in initial mapping —
- * whichever the app hits gets mocked; the others sit idle.
+ * Scenario shape for one password-change behavior. Cognito direct is the only
+ * transport observed live; the field is required. `rest` and `graphql` slots are
+ * intentionally absent — kept on the type only as documentation that the data
+ * table could grow if the transport ever changes.
+ */
+type PasswordScenario = {
+  cognito: {
+    /** HTTP status — 200 for success, 400 for any Cognito-classified failure. */
+    status: number;
+    /** `__type` field in the Cognito error body. Omit on success. */
+    type?: string;
+    /** `message` field in the Cognito error body. Omit on success. */
+    message?: string;
+  };
+};
+
+/**
+ * One row per behavior. Adding a new scenario = one entry here; route handler
+ * stays untouched. Assertion text stays close to fixture text by design.
  *
- * Hedged endpoints:
- *   1. REST POST to any `PASSWORD_REST_CANDIDATES` path.
- *   2. GraphQL `core/api/graphql` POST with operationName matching /password/i.
- *   3. GraphQL `users/api/graphql` POST with operationName matching /password/i.
- *   4. Cognito direct POST with header `X-Amz-Target` containing `ChangePassword`
- *      (AWS Amplify apps often call this directly from the browser).
+ * Cognito uses these specific `__type` values; the app branches on them to pick
+ * the user-facing error message. Captured from the live AWS Cognito service.
+ */
+export const PASSWORD_SCENARIOS: Record<
+  PasswordChangeBehavior,
+  PasswordScenario
+> = {
+  success: {
+    cognito: { status: 200 },
+  },
+  "wrong-current": {
+    cognito: {
+      status: 400,
+      type: "NotAuthorizedException",
+      message: "Incorrect username or password.",
+    },
+  },
+  "same-as-current": {
+    cognito: {
+      status: 400,
+      type: "InvalidParameterException",
+      message: "Previous password and proposed password must be different.",
+    },
+  },
+  "policy-violation": {
+    cognito: {
+      status: 400,
+      type: "InvalidPasswordException",
+      message: "Password did not conform with policy.",
+    },
+  },
+};
+
+/**
+ * Mock the AWS Cognito direct `ChangePassword` call with the given behavior.
  *
- * Error shapes per transport:
- *   - REST: HTTP 4xx with `{ code, message }`.
- *   - GraphQL: HTTP 200 with `errors[]` (Apollo convention).
- *   - Cognito: HTTP 400 with `__type` matching the failure code.
+ * Investown's web app uses the AWS Amplify SDK (`aws-amplify/auth`) to call
+ * Cognito directly from the browser — no app-server REST or GraphQL endpoint
+ * sits in front of it. The call goes to
+ *   POST https://cognito-idp.<region>.amazonaws.com/
+ * with header `X-Amz-Target: AWSCognitoIdentityProviderService.ChangePassword`
+ * and body `{ AccessToken, PreviousPassword, ProposedPassword }`.
+ *
+ * Response shape:
+ *   - Success: HTTP 200 with empty body `{}`.
+ *   - Failure: HTTP 400 with `{ __type, message }` (see `PASSWORD_SCENARIOS`).
  */
 export async function mockPasswordChange(
   page: Page,
   behavior: PasswordChangeBehavior,
 ): Promise<void> {
-  // Explicit path list (vs broad glob + substring filter) keeps the surface area
-  // auditable and lets page.route() matching do the filtering.
-  await Promise.all(
-    PASSWORD_REST_CANDIDATES.map((pattern) =>
-      page.route(pattern, async (route: Route) => {
-        if (route.request().method() !== "POST") {
-          await route.fallback();
-          return;
-        }
-        await route.fulfill(restPasswordResponse(behavior));
-      }),
-    ),
-  );
-
-  const passwordGraphQLHandler = async (route: Route): Promise<void> => {
-    const request = route.request();
-    if (request.method() !== "POST") {
-      await route.fallback();
-      return;
-    }
-    const body = readJsonBody(request);
-    const op = body?.operationName ?? "";
-    if (!/password/i.test(op) && !/password/i.test(body?.query ?? "")) {
-      await route.fallback();
-      return;
-    }
-    await route.fulfill(graphQLPasswordResponse(behavior, op));
-  };
-  await page.route(URL_CORE_GRAPHQL, passwordGraphQLHandler);
-  await page.route(URL_USERS_GRAPHQL, passwordGraphQLHandler);
+  const scenario = PASSWORD_SCENARIOS[behavior];
 
   await page.route(URL_COGNITO, async (route: Route) => {
     const request = route.request();
@@ -636,84 +645,16 @@ export async function mockPasswordChange(
       await route.fallback();
       return;
     }
-    await route.fulfill(cognitoPasswordResponse(behavior));
+    await route.fulfill(buildCognitoResponse(scenario.cognito));
   });
 }
 
-/** REST response for the password-change endpoint, per behavior. */
-function restPasswordResponse(behavior: PasswordChangeBehavior): {
-  status: number;
-  contentType: string;
-  body: string;
-} {
-  if (behavior === "success") {
-    return {
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ success: true }),
-    };
-  }
-  const errorMap: Record<
-    Exclude<PasswordChangeBehavior, "success">,
-    { status: number; code: string; message: string }
-  > = {
-    "wrong-current": {
-      status: 401,
-      code: "INVALID_CURRENT_PASSWORD",
-      message: "Current password is incorrect",
-    },
-    "same-as-current": {
-      status: 400,
-      code: "PASSWORD_SAME_AS_CURRENT",
-      message: "New password must differ from current password",
-    },
-    "policy-violation": {
-      status: 400,
-      code: "PASSWORD_POLICY_VIOLATION",
-      message: "Password does not meet policy requirements",
-    },
-  };
-  const detail = errorMap[behavior];
-  return {
-    status: detail.status,
-    contentType: "application/json",
-    body: JSON.stringify({ code: detail.code, message: detail.message }),
-  };
-}
-
-/** GraphQL response for the password-change mutation, per behavior. */
-function graphQLPasswordResponse(
-  behavior: PasswordChangeBehavior,
-  operationName: string,
-): { status: number; contentType: string; body: string } {
-  if (behavior === "success") {
-    return gqlSuccess({
-      [operationName || "changePassword"]: { success: true },
-    });
-  }
-  const messageMap: Record<
-    Exclude<PasswordChangeBehavior, "success">,
-    { message: string; code: string }
-  > = {
-    "wrong-current": {
-      message: "Current password is incorrect",
-      code: "INVALID_CURRENT_PASSWORD",
-    },
-    "same-as-current": {
-      message: "New password must differ from current password",
-      code: "PASSWORD_SAME_AS_CURRENT",
-    },
-    "policy-violation": {
-      message: "Password does not meet policy requirements",
-      code: "PASSWORD_POLICY_VIOLATION",
-    },
-  };
-  const detail = messageMap[behavior];
-  return gqlError(detail.message, { code: detail.code });
-}
-
-/** Cognito ChangePassword direct-call response, per behavior. */
-function cognitoPasswordResponse(behavior: PasswordChangeBehavior): {
+/**
+ * Build a Playwright `route.fulfill` response payload from a scenario row.
+ * Success returns an empty Cognito body; failure echoes `__type` + `message`
+ * verbatim from the scenario table.
+ */
+function buildCognitoResponse(cognito: PasswordScenario["cognito"]): {
   status: number;
   contentType: string;
   headers: Record<string, string>;
@@ -722,7 +663,7 @@ function cognitoPasswordResponse(behavior: PasswordChangeBehavior): {
   const headers: Record<string, string> = {
     "x-amzn-requestid": "mocked-request-id",
   };
-  if (behavior === "success") {
+  if (cognito.status === 200) {
     return {
       status: 200,
       contentType: "application/x-amz-json-1.1",
@@ -730,30 +671,14 @@ function cognitoPasswordResponse(behavior: PasswordChangeBehavior): {
       body: JSON.stringify({}),
     };
   }
-  // Cognito uses these specific __type values; the app likely branches on them.
-  const cognitoErrors: Record<
-    Exclude<PasswordChangeBehavior, "success">,
-    { type: string; message: string }
-  > = {
-    "wrong-current": {
-      type: "NotAuthorizedException",
-      message: "Incorrect username or password.",
-    },
-    "same-as-current": {
-      type: "InvalidParameterException",
-      message: "Previous password and proposed password must be different.",
-    },
-    "policy-violation": {
-      type: "InvalidPasswordException",
-      message: "Password did not conform with policy.",
-    },
-  };
-  const detail = cognitoErrors[behavior];
   return {
-    status: 400,
+    status: cognito.status,
     contentType: "application/x-amz-json-1.1",
     headers,
-    body: JSON.stringify({ __type: detail.type, message: detail.message }),
+    body: JSON.stringify({
+      __type: cognito.type ?? "UnknownException",
+      message: cognito.message ?? "Unknown error",
+    }),
   };
 }
 
