@@ -25,7 +25,7 @@ X-Amz-Target: AWSCognitoIdentityProviderService.ConfirmForgotPassword
 **Flow:**
 
 1. **UI** — open `/forgotten-password`, submit email
-2. **API** (testmail.app) — fetch reset mail, extract `c=` code from URL hash
+2. **API** (mailsac) — fetch reset mail, extract `c=` code from URL hash
 3. **API** (Cognito) — POST `ConfirmForgotPassword` with code + new password
 4. **UI** — login with new password verifies the reset on real backend
 
@@ -55,21 +55,21 @@ npm install
 npx playwright install chromium
 
 cp .env.example .env
-# Fill in TESTMAIL_API_KEY and TESTMAIL_NAMESPACE (sign up free at testmail.app)
+# Fill in MAILSAC_API_KEY (sign up free at mailsac.com — 1500 API calls / month)
 ```
 
 ## Test account
 
 Pre-verified seed account on `dev.investown.net` (staging only, no real money).
 
-| Field            | Value                                 |
-| ---------------- | ------------------------------------- |
-| Email            | `a6ncd.investown2@inbox.testmail.app` |
-| Initial password | _see `INVESTOWN_PASSWORD` in `.env`_  |
-| Name             | `TESTER TEST`                         |
-| Phone            | `+447481762285` (UK temp-number.com)  |
+| Field            | Value                                               |
+| ---------------- | --------------------------------------------------- |
+| Email            | _see `INVESTOWN_EMAIL` in `.env` (a mailsac inbox)_ |
+| Initial password | _see `INVESTOWN_PASSWORD` in `.env`_                |
+| Name             | `TESTER TEST`                                       |
+| Phone            | `+447481762285` (UK temp-number.com)                |
 
-> ⚠️ Staging only. Email inbox is public to anyone with the testmail.app namespace; never reuse this password elsewhere.
+> ⚠️ Staging only. Mailsac inboxes are PUBLIC by default — mark yours as Private in the mailsac UI so reset links aren't world-readable. Never reuse this password elsewhere.
 
 ## Password drift — how it's handled
 
@@ -102,7 +102,7 @@ npx playwright test sign-in.spec.ts   # one file
 data/             Test data constants (env-driven)
 fixtures/         Playwright fixtures (POM injection)
 helpers/
-  ├── testmail.ts      testmail.app API wrapper (waitForEmail, extractLink, testmailTag)
+  ├── mailsac.ts       mailsac.com API wrapper (waitForEmail, extractLink)
   ├── cognito.ts       AWS Cognito ConfirmForgotPassword (hybrid password reset)
   └── credentials.ts   Load/save current password between test runs
 pages/            Page Object Models
@@ -121,7 +121,7 @@ auth/             [GITIGNORED] Persisted current password between runs
 
 - **POM pattern** with fixture-based DI (`fixtures/pages.fixture.ts`).
 - **Stable selectors only** — `getByRole`, `getByLabel` (no `.nth()`, no CSS classes).
-- **Real APIs over mocks** — tests hit live `dev.investown.net` and real testmail.app inbox.
+- **Real APIs over mocks** — tests hit live `dev.investown.net` and real mailsac inbox.
 - **No personal credentials** — all secrets in `.env` (gitignored).
 - **Idempotent password handling** — see "Password drift" above.
 
@@ -142,4 +142,4 @@ auth/             [GITIGNORED] Persisted current password between runs
 
 ## References
 
-- testmail.app API: https://testmail.app/docs
+- mailsac API: https://docs.mailsac.com/

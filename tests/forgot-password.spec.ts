@@ -1,7 +1,5 @@
 import { test, expect } from "../fixtures/pages.fixture.js";
-import { waitForEmail } from "../helpers/testmail.js";
-
-const NAMESPACE = process.env.TESTMAIL_NAMESPACE ?? "";
+import { waitForEmail } from "../helpers/mailsac.js";
 
 test.describe("Forgot password — negative & security", () => {
   test(
@@ -42,8 +40,7 @@ test.describe("Forgot password — negative & security", () => {
       // Security: requesting reset for a non-existent address must show the SAME
       // generic confirmation as a valid one ("Please, check your e-mail."). No
       // user-enumeration leak via error message or different copy.
-      const tag = `nonexistent-${Date.now()}`;
-      const nonExistentEmail = `${NAMESPACE}.${tag}@inbox.testmail.app`;
+      const nonExistentEmail = `nonexistent-${Date.now()}@mailsac.com`;
       const sinceMs = Date.now();
 
       await forgotPasswordPage.navigate();
@@ -58,7 +55,7 @@ test.describe("Forgot password — negative & security", () => {
       // should be to silently drop, not to send to non-existent users.
       let mailArrived = false;
       try {
-        await waitForEmail(tag, {
+        await waitForEmail(nonExistentEmail, {
           subject: "INVESTOWN",
           sinceMs,
           timeoutMs: 15_000,

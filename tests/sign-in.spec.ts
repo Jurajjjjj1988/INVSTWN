@@ -91,7 +91,7 @@ test.describe("Sign in", () => {
       // Security: error must match the wrong-password error — revealing
       // "user not found" vs "wrong password" enables user enumeration.
       await signInPage.login(
-        `a6ncd.nonexistent-${Date.now()}@inbox.testmail.app`,
+        `nonexistent-${Date.now()}@mailsac.com`,
         "AnyPassword123!",
       );
       await expect(signInPage.errorMessage).toBeVisible();

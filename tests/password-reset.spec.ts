@@ -1,11 +1,10 @@
 import { test, expect } from "../fixtures/pages.fixture.js";
-import { waitForEmail, extractLink, testmailTag } from "../helpers/testmail.js";
+import { waitForEmail, extractLink } from "../helpers/mailsac.js";
 import { confirmForgotPassword } from "../helpers/cognito.js";
 import { saveCurrentPassword } from "../helpers/credentials.js";
 import { TEST_DATA } from "../data/test-data.js";
 
 const EMAIL = TEST_DATA.SIGN_UP.EMAIL;
-const TAG = testmailTag(EMAIL);
 
 test.describe("Password reset", () => {
   // Serial — mutates shared seed account (password + single-use reset code).
@@ -26,7 +25,7 @@ test.describe("Password reset", () => {
       await forgotPasswordPage.requestReset(EMAIL);
 
       const code = await test.step("fetch reset code from mail", async () => {
-        const mail = await waitForEmail(TAG, {
+        const mail = await waitForEmail(EMAIL, {
           subject: "INVESTOWN",
           sinceMs,
           timeoutMs: 60_000,

@@ -1,10 +1,9 @@
 import { test, expect } from "../fixtures/pages.fixture.js";
-import { waitForEmail, extractLink, testmailTag } from "../helpers/testmail.js";
+import { waitForEmail, extractLink } from "../helpers/mailsac.js";
 import { ForgotPasswordPage } from "../pages/forgot-password.page.js";
 import { TEST_DATA } from "../data/test-data.js";
 
 const EMAIL = TEST_DATA.SIGN_UP.EMAIL;
-const TAG = testmailTag(EMAIL);
 
 const INVALID_PASSWORDS = [
   { rule: "shorter than 8 chars", newPwd: "Ab1!", confirmPwd: "Ab1!" },
@@ -56,7 +55,7 @@ test.describe.fixme("Reset password — validation rules", () => {
     await forgot.navigate();
     await forgot.requestReset(EMAIL);
 
-    const mail = await waitForEmail(TAG, {
+    const mail = await waitForEmail(EMAIL, {
       subject: "INVESTOWN",
       sinceMs,
       timeoutMs: 60_000,
