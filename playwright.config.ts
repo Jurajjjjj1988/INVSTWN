@@ -7,7 +7,9 @@ export default defineConfig({
   // Parallel by default. Tests that mutate shared state (password-reset.spec.ts)
   // opt into serial mode via test.describe.configure({ mode: "serial" }).
   fullyParallel: true,
-  workers: process.env.CI ? 2 : undefined, // local: all cores; CI: 2 (one test account)
+  // 2-minute total budget — workers=4 on CI keeps the wall-clock under that
+  // budget despite JWT TTL pressure. Locally Playwright uses all cores.
+  workers: process.env.CI ? 4 : undefined,
   retries: 1,
   timeout: 30_000,
   expect: { timeout: 10_000 },

@@ -157,12 +157,7 @@ test.describe("Profile — Notifikace", () => {
     },
   );
 
-  // FIXME: Both dispatchEvent('click') and setChecked({force:true}) fail against
-  // this checkbox. Native input has visibility:hidden + the React component
-  // listens for synthetic pointer events that neither primitive replicates.
-  // Workaround would be to click the parent <label> via JS evaluate — needs
-  // Walk & Watch verification on the live build. Sister test pattern same.
-  test.fixme(
+  test(
     "clicking Souhrnné přehledy toggle sends a mutation with the toggled value",
     { tag: ["@positive", "@notifications"] },
     async ({ page, profilePage }) => {
@@ -182,9 +177,13 @@ test.describe("Profile — Notifikace", () => {
 
       const toggle = profilePage.notifications.emailSummariesToggle;
       await expect(toggle).toBeAttached();
-      // Native checkbox is visually-hidden — setChecked({force:true}) toggles
-      // state AND fires the native change event React listens for.
-      await toggle.setChecked(true, { force: true });
+      // Native checkbox is visibility:hidden — Playwright's setChecked / dispatchEvent
+      // either fail actionability or skip React's onChange. Calling the DOM .click()
+      // via evaluate() bypasses Playwright checks AND fires native click+change events
+      // that React listens for.
+      await toggle.evaluate((el: HTMLInputElement) => {
+        el.click();
+      });
 
       await expect
         .poll(() => getLastMutation(), { timeout: 5_000 })
@@ -196,20 +195,18 @@ test.describe("Profile — Notifikace", () => {
         throw new Error("unreachable — guarded by expect above");
       }
 
-      // Operation name heuristic — actual name varies between deployments.
-      expect(captured.operationName).toMatch(/(update|toggle|set|save)/i);
+      // Operation name heuristic — actual name varies between deployments (e.g. PatchUserPreference).
+      expect(captured.operationName).toMatch(/(update|toggle|set|save|patch)/i);
 
-      // Flatten to handle top-level OR nested-under-input variable shapes.
+      // Real GraphQL shape: { input: { preferenceCategoryName: "SummaryReports", email: true, ... } }.
       const variables = captured.variables ?? {};
       const flattenedVars = JSON.stringify(variables);
-      expect(flattenedVars).toContain('"emailSummaries"');
-      expect(flattenedVars).toMatch(/"emailSummaries"\s*:\s*true/);
+      expect(flattenedVars).toContain('"SummaryReports"');
+      expect(flattenedVars).toMatch(/"email"\s*:\s*true/);
     },
   );
 
-  // FIXME: Same root cause as the sibling toggle test — neither dispatchEvent
-  // nor setChecked reaches React's onChange. See FIXME above.
-  test.fixme(
+  test(
     "toggle reverts when mutation errors",
     { tag: ["@edge", "@notifications"] },
     async ({ page, profilePage }) => {
@@ -231,9 +228,11 @@ test.describe("Profile — Notifikace", () => {
       const toggle = profilePage.notifications.emailOpportunitiesToggle;
       await expect(toggle).toBeAttached();
 
-      // Native checkbox is visually-hidden — setChecked({force:true}) toggles
-      // state AND fires the native change event React listens for.
-      await toggle.setChecked(true, { force: true });
+      // Native checkbox is visibility:hidden — evaluate(el.click()) bypasses
+      // actionability checks AND fires the native change event React listens for.
+      await toggle.evaluate((el: HTMLInputElement) => {
+        el.click();
+      });
 
       // Optimistic UI must send the mutation even on the error path.
       await expect
@@ -245,14 +244,17 @@ test.describe("Profile — Notifikace", () => {
     },
   );
 
-  // FIXME: Same root cause as sibling toggle tests — click primitives don't
-  // reach React's handler. See FIXME on "clicking Souhrnné přehledy".
-  test.fixme(
+  test(
     "notification preferences persist across reload",
     { tag: ["@positive", "@notifications"] },
     async ({ page, profilePage }) => {
       // Guards the toggle → mutation → reload → server-returned-state round-trip.
-      let currentPrefs = { ...DEFAULT_NOTIFICATIONS };
+      // emailMaster MUST be true — when master is off, the child email toggles are
+      // disabled and don't fire mutations.
+      let currentPrefs = {
+        ...DEFAULT_NOTIFICATIONS,
+        emailMaster: true,
+      };
       const { getLastMutation } = await mockNotifications(page, {
         initial: currentPrefs,
         mutate: "success",
@@ -262,11 +264,13 @@ test.describe("Profile — Notifikace", () => {
         profilePage.notifications.emailSummariesToggle,
       ).toBeAttached();
 
-      // setChecked({force:true}) is the Playwright primitive for visually-hidden
-      // checkboxes — fires native change events React listens for.
-      await profilePage.notifications.emailSummariesToggle.setChecked(true, {
-        force: true,
-      });
+      // Native checkbox is visibility:hidden — evaluate(el.click()) bypasses
+      // actionability checks AND fires the native change event React listens for.
+      await profilePage.notifications.emailSummariesToggle.evaluate(
+        (el: HTMLInputElement) => {
+          el.click();
+        },
+      );
 
       await expect
         .poll(() => getLastMutation(), { timeout: 5_000 })
