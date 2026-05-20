@@ -38,11 +38,9 @@ import {
 // from local darwin. Generate via `npm run test:slow -- --update-snapshots`
 // on the target OS, then commit the .png files.
 test.describe("Profile — Visual regression", () => {
-  test.describe.configure({ tag: "@slow" });
-
   test(
     "personal data section",
-    { tag: ["@visual", "@profile"] },
+    { tag: ["@visual", "@profile", "@slow"] },
     async ({ profilePage, page }) => {
       await profilePage.gotoSection("personalData");
       await expect(profilePage.personalData.heading).toBeVisible();
@@ -58,7 +56,7 @@ test.describe("Profile — Visual regression", () => {
 
   test(
     "notifications section",
-    { tag: ["@visual", "@profile"] },
+    { tag: ["@visual", "@profile", "@slow"] },
     async ({ profilePage, page }) => {
       // Explicit notifications mock — guarantees a deterministic toggle state
       // (all OFF via DEFAULT_NOTIFICATIONS) regardless of any future baseline
@@ -79,7 +77,7 @@ test.describe("Profile — Visual regression", () => {
 
   test(
     "password change empty form",
-    { tag: ["@visual", "@profile"] },
+    { tag: ["@visual", "@profile", "@slow"] },
     async ({ profilePage, page }) => {
       // Password change is a Cognito-direct call; mock it as `success` to keep
       // the page in a clean idle state (no inline error UI). We never submit,

@@ -42,7 +42,7 @@ const INVALID_PASSWORDS = [
 // validation pre-checks fire before form mount. Investigate before
 // promoting to the fast suite.
 test.describe("Reset password — validation rules", () => {
-  test.describe.configure({ mode: "serial", tag: "@slow" });
+  test.describe.configure({ mode: "serial" });
   test.setTimeout(90_000);
 
   // Clear the shared signed-in session — /reset-password redirects authenticated
@@ -56,7 +56,7 @@ test.describe("Reset password — validation rules", () => {
     test(
       `${rule} keeps Change password button disabled`,
       {
-        tag: ["@negative", "@auth", "@password", "@validation"],
+        tag: ["@negative", "@auth", "@password", "@validation", "@slow"],
       },
       async ({ resetPasswordPage }) => {
         await resetPasswordPage.navigate(resetUrl);
