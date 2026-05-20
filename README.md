@@ -31,6 +31,72 @@ X-Amz-Target: AWSCognitoIdentityProviderService.ConfirmForgotPassword
 
 Tested contract = same one frontend uses. RHF/anti-bot fragility removed. See `helpers/cognito.ts`.
 
+## Profile portal tests (`/user`)
+
+End-to-end coverage of the account portal (8 sub-sections under `/user/*`). Single spec file, mocked backend, parallel-safe.
+
+### What's covered
+
+| Section       | Route                   | Tests | Notes                                         |
+| ------------- | ----------------------- | ----- | --------------------------------------------- |
+| Osobní údaje  | `/user`                 | 2     | Name/e-mail/phone/ID rendering, edit-disabled |
+| Dokumenty     | `/user/documents`       | 1     | 6 download links present + accessible         |
+| Notifikace    | `/user/notifications`   | 3     | E-mail + SMS toggles, mutation payload assert |
+| Jazyky        | `/user/languages`       | 1     | Czech default, English switch                 |
+| Změna hesla   | `/user/password-change` | 5     | RHF blur, wrong-current, same-as-current      |
+| Dvoufaktorové | `/user/mfa`             | 1     | Inactive badge, Aktivovat button trigger only |
+| Podpora       | `/user/support`         | 1     | Chat trigger + `support@investown.cz` link    |
+| Auth + nav    | all `/user/*`           | 2     | Logout + deep-link auth guard                 |
+
+Tag split: `@positive` (happy paths), `@negative` (error states from mocked APIs), `@edge` (RHF blur, error revert), `@security` (auth guard, wrong current, same-as-current).
+
+### API mocking strategy
+
+All backend calls are intercepted via `page.route()` and fulfilled from `data/profile-mocks.ts`. Why mocks here, not in password-reset:
+
+- **Parallel-safe** — no shared seed account, no rate-limit races. Each worker gets its own mocked `dev-api.investown.net`.
+- **Deterministic** — `DEFAULT_USER` / `DEFAULT_NOTIFICATIONS` fixtures mean assertions never depend on what staging DB happens to hold today.
+- **2-min budget** — no mailsac round-trips, no Cognito reset chain.
+- **No account pollution** — toggling notifications or changing password against the real account would drift state for the next run.
+
+`profile-mocks.ts` exposes:
+
+- `setupProfileBaseline(page)` — third-party blocklist (Exponea, Intercom, GA, GTM) + `mockUserDetails` + `mockUserLevels` + `mockUserVerification`.
+- `mockNotifications(page, { initial, mutate })` — GraphQL query/mutation handler with `getLastMutation()` closure so tests assert exactly what the UI sent.
+- `mockPasswordChange(page, behavior)` — hedged across REST (`/users/api/v1/users/password` and variants), GraphQL (`/core/api/graphql`), and Cognito direct (`ChangePassword`). Behaviors: `success` / `wrong-current` / `same-as-current` / `policy-violation`.
+
+> **Pointa:** Last-registered `page.route()` wins, so tests can layer overrides on top of `setupProfileBaseline` without resetting.
+
+### Auth setup
+
+`auth-setup.ts` runs **once** as `globalSetup` — real UI login against `dev.investown.net`, storage state saved to `.auth/user.json`. Every profile test inherits it via `use: { storageState: '.auth/user.json' }` and skips the sign-in screen entirely.
+
+Why this matters for the 2-min budget: UI login takes ~10s (RHF onBlur + redirect). Doing it once instead of 16× keeps the whole profile spec under ~90s on CI with 2 workers.
+
+### Constraints honored
+
+The suite was built explicitly to:
+
+- **Use API for data mocking** — zero live backend calls inside the `profile.spec.ts` tests themselves; only `globalSetup` touches the real app.
+- **Run in parallel** — `fullyParallel: true` in `playwright.config.ts`. No `serial` opt-in, no shared mutable state.
+- **Complete within 2 minutes** — wall-clock target including `globalSetup`. Achieved by mocks + storageState reuse.
+
+### What was intentionally NOT tested
+
+- **Investown členství** — section has no interactive functionality.
+- **Zrušit účet** — destructive flow, deferred as separate scenario with throwaway account.
+- **Intercom chat content** — third-party widget, blocked at network layer.
+- **Mobile responsive layout** — separate concern, viewport variants belong in their own project config.
+
+### How to run
+
+```bash
+npx playwright test profile.spec.ts --reporter=list   # whole suite
+npx playwright test profile.spec.ts --grep @security  # tag filter
+npx playwright test profile.spec.ts --grep @negative  # error-path subset
+npx playwright test profile.spec.ts --headed          # watch it run
+```
+
 ## What is NOT automated — and why
 
 Two platform-side blockers:

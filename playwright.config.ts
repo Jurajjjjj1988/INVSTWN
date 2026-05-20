@@ -3,6 +3,7 @@ import "dotenv/config";
 
 export default defineConfig({
   testDir: "./tests",
+  globalSetup: "./auth-setup.ts",
   // Parallel by default. Tests that mutate shared state (password-reset.spec.ts)
   // opt into serial mode via test.describe.configure({ mode: "serial" }).
   fullyParallel: true,
@@ -15,6 +16,7 @@ export default defineConfig({
     baseURL: process.env.BASE_URL,
     trace: "on-first-retry",
     screenshot: "only-on-failure",
+    storageState: ".auth/user.json",
   },
   projects: [
     {

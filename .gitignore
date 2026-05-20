@@ -8,6 +8,7 @@ playwright/.cache/
 .env.local
 auth.json
 auth/
+.auth/
 
 # OS
 .DS_Store

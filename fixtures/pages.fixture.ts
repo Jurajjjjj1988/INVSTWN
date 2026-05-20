@@ -6,6 +6,7 @@ import { VerificationPage } from "../pages/verification.page.js";
 import { SignInPage } from "../pages/sign-in.page.js";
 import { ForgotPasswordPage } from "../pages/forgot-password.page.js";
 import { ResetPasswordPage } from "../pages/reset-password.page.js";
+import { ProfilePage } from "../pages/profile.page.js";
 
 type Pages = {
   signUpEmailPage: SignUpEmailPage;
@@ -15,6 +16,7 @@ type Pages = {
   signInPage: SignInPage;
   forgotPasswordPage: ForgotPasswordPage;
   resetPasswordPage: ResetPasswordPage;
+  profilePage: ProfilePage;
 };
 
 export const test = base.extend<Pages>({
@@ -38,6 +40,9 @@ export const test = base.extend<Pages>({
   },
   resetPasswordPage: async ({ page }, use) => {
     await use(new ResetPasswordPage(page));
+  },
+  profilePage: async ({ page }, use) => {
+    await use(new ProfilePage(page));
   },
 });
 

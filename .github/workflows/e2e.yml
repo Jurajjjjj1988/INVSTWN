@@ -1,0 +1,117 @@
+# E2E Playwright tests for Investown.
+#
+# Required GitHub Actions secrets (Settings -> Secrets and variables -> Actions):
+#   - INVESTOWN_EMAIL              Test account email (mailsac inbox)
+#   - INVESTOWN_PASSWORD           Test account password
+#   - INVESTOWN_PHONE              UK virtual phone used at signup
+#   - MAILSAC_API_KEY              mailsac.com API key (1500 calls/mo free tier)
+#   - BASE_URL                     Target environment (e.g. https://dev.investown.net)
+#   - INVESTOWN_COGNITO_CLIENT_ID  Cognito app client id (used by password-reset API submit)
+#
+# Non-secret env values (INVESTOWN_COGNITO_URL, INVESTOWN_FIRST_NAME,
+# INVESTOWN_LAST_NAME) are inlined below since they are public defaults.
+
+name: E2E
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Cancel older in-progress runs on the same ref when a new commit lands.
+concurrency:
+  group: e2e-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Fast TypeScript compile check via `playwright test --list` (~30s).
+  # Catches type errors before spinning up browsers.
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          # Built-in npm cache keyed off package-lock.json - faster than manual cache.
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck (playwright test --list)
+        run: npm run typecheck
+
+  # Full Playwright suite. Depends on typecheck so we don't waste CI on broken types.
+  e2e:
+    name: Playwright tests
+    needs: typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Cache Playwright browser binaries (~120MB for chromium) keyed off the
+      # @playwright/test version in package-lock.json. Restore avoids the ~30s
+      # `playwright install` download on cache hit.
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      # Always run install so system deps (--with-deps) are present even on
+      # cache hit; browser binaries themselves are skipped if already cached.
+      - name: Install Playwright Chromium + system deps
+        run: npx playwright install chromium --with-deps
+
+      - name: Run Playwright tests
+        env:
+          CI: "true"
+          BASE_URL: ${{ secrets.BASE_URL }}
+          INVESTOWN_EMAIL: ${{ secrets.INVESTOWN_EMAIL }}
+          INVESTOWN_PASSWORD: ${{ secrets.INVESTOWN_PASSWORD }}
+          INVESTOWN_PHONE: ${{ secrets.INVESTOWN_PHONE }}
+          INVESTOWN_FIRST_NAME: TESTER
+          INVESTOWN_LAST_NAME: TEST
+          MAILSAC_API_KEY: ${{ secrets.MAILSAC_API_KEY }}
+          INVESTOWN_COGNITO_CLIENT_ID: ${{ secrets.INVESTOWN_COGNITO_CLIENT_ID }}
+          INVESTOWN_COGNITO_URL: https://cognito-idp.eu-west-1.amazonaws.com/
+        run: npm test
+
+      # HTML report uploaded even on failure so we can inspect what broke.
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 14
+
+      # Raw test-results (traces, screenshots, videos) only on failure - large.
+      - name: Upload test-results on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: test-results/
+          retention-days: 14
