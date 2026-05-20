@@ -16,8 +16,15 @@ name: E2E
 on:
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - ".gitignore"
+      - "CONTRIBUTING.md"
   push:
     branches: [main]
+    paths-ignore:
+      - "**/*.md"
+      - ".gitignore"
 
 # Cancel older in-progress runs on the same ref when a new commit lands.
 concurrency:

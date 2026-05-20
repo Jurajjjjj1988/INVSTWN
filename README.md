@@ -33,20 +33,21 @@ Tested contract = same one frontend uses. RHF/anti-bot fragility removed. See `h
 
 ## Profile portal tests (`/user`)
 
-End-to-end coverage of the account portal (8 sub-sections under `/user/*`). Single spec file, mocked backend, parallel-safe.
+End-to-end coverage of the account portal (8 sub-sections under `/user/*`). Mocked backend, parallel-safe. Split across `tests/profile.spec.ts` (everything except Intercom) and `tests/profile-chat.spec.ts` (chat widget, baseline keeps Intercom unblocked). ~30 tests total, all green.
 
 ### What's covered
 
-| Section       | Route                   | Tests | Notes                                         |
-| ------------- | ----------------------- | ----- | --------------------------------------------- |
-| Osobní údaje  | `/user`                 | 2     | Name/e-mail/phone/ID rendering, edit-disabled |
-| Dokumenty     | `/user/documents`       | 1     | 6 download links present + accessible         |
-| Notifikace    | `/user/notifications`   | 3     | E-mail + SMS toggles, mutation payload assert |
-| Jazyky        | `/user/languages`       | 1     | Czech default, English switch                 |
-| Změna hesla   | `/user/password-change` | 5     | RHF blur, wrong-current, same-as-current      |
-| Dvoufaktorové | `/user/mfa`             | 1     | Inactive badge, Aktivovat button trigger only |
-| Podpora       | `/user/support`         | 1     | Chat trigger + `support@investown.cz` link    |
-| Auth + nav    | all `/user/*`           | 3     | Logout + deep-link auth guard + back-button   |
+| Section       | Route                   | Tests | Notes                                                                                 |
+| ------------- | ----------------------- | ----- | ------------------------------------------------------------------------------------- |
+| Osobní údaje  | `/user`                 | 2     | Name/e-mail/phone/ID rendering, edit-disabled                                         |
+| Dokumenty     | `/user/documents`       | 2     | 6 download links + click opens content in new tab                                     |
+| Notifikace    | `/user/notifications`   | 4     | E-mail + SMS toggles, mutation payload, error revert, persistence                     |
+| Jazyky        | `/user/languages`       | 1     | Czech default, English switch                                                         |
+| Změna hesla   | `/user/password-change` | 7     | RHF blur, wrong-current, same-as-current, plaintext guard, locale switch              |
+| Dvoufaktorové | `/user/mfa`             | 4     | Aktivovat reveals input + 3 negative paths (empty, non-numeric, wrong code)           |
+| Podpora       | `/user/support`         | 1     | `support@investown.cz` mailto + chat trigger                                          |
+| Auth + nav    | all `/user/*`           | 3     | Logout + deep-link auth guard + back-after-logout (BFCache)                           |
+| Chatbot       | `/user/support`         | 2     | Intercom launcher opens messenger + personalized greeting (in `profile-chat.spec.ts`) |
 
 Tag split: `@positive` (happy paths), `@negative` (error states from mocked APIs), `@edge` (RHF blur, error revert), `@security` (auth guard, wrong current, same-as-current).
 
@@ -61,9 +62,9 @@ All backend calls are intercepted via `page.route()` and fulfilled from `data/pr
 
 `profile-mocks.ts` exposes:
 
-- `setupProfileBaseline(page)` — third-party blocklist (Exponea, Intercom, GA, GTM) + `mockUserDetails` + `mockUserLevels` + `mockUserVerification`.
-- `mockNotifications(page, { initial, mutate })` — GraphQL query/mutation handler with `getLastMutation()` closure so tests assert exactly what the UI sent.
-- `mockPasswordChange(page, behavior)` — hedged across REST (`/users/api/v1/users/password` and variants), GraphQL (`/core/api/graphql`), and Cognito direct (`ChangePassword`). Behaviors: `success` / `wrong-current` / `same-as-current` / `policy-violation`.
+- `setupProfileBaseline(page)` — third-party blocklist (Exponea, Intercom, GA, GTM) + `mockUserDetails` + `mockUserLevels` + `mockUserVerification`. Wired as an auto-fixture in `fixtures/profile.fixture.ts` so every profile test inherits it without a manual call.
+- `mockNotifications(page, { initial, mutate })` — GraphQL query/mutation handler with `getLastMutation()` closure (validated via `isCapturedMutation` runtime type guard) so tests assert exactly what the UI sent.
+- `mockPasswordChange(page, behavior)` — Cognito-direct only (`X-Amz-Target: ChangePassword`) — verified live on 2026-05-20 as the sole transport. Backed by the `PASSWORD_SCENARIOS` data table; behaviors: `success` / `wrong-current` / `same-as-current` / `policy-violation`. Adding a new error case = one row, no handler edit.
 
 > **Pointa:** Last-registered `page.route()` wins, so tests can layer overrides on top of `setupProfileBaseline` without resetting.
 
@@ -91,10 +92,11 @@ The suite was built explicitly to:
 ### How to run
 
 ```bash
-npx playwright test profile.spec.ts --reporter=list   # whole suite
-npx playwright test profile.spec.ts --grep @security  # tag filter
-npx playwright test profile.spec.ts --grep @negative  # error-path subset
-npx playwright test profile.spec.ts --headed          # watch it run
+npx playwright test profile.spec.ts profile-chat.spec.ts --reporter=list   # whole profile suite
+npx playwright test profile.spec.ts --grep @security                       # tag filter
+npx playwright test profile.spec.ts --grep @negative                       # error-path subset
+npx playwright test profile-chat.spec.ts                                   # Intercom widget only
+npx playwright test profile.spec.ts --headed                               # watch it run
 ```
 
 ## What is NOT automated — and why

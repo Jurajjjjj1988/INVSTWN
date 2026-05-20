@@ -64,6 +64,25 @@ export type CapturedMutation = {
   rawBody: unknown;
 };
 
+/**
+ * Runtime type guard for `CapturedMutation`. Validates the structural shape
+ * without adding a schema-validation dependency (Zod, io-ts). Use in tests
+ * before reading `value.variables` so TypeScript narrows and the assertion
+ * fails fast on malformed captures rather than `undefined.something` crashes.
+ *
+ * Guarantees on success: `operationName` is a string and `variables` is either
+ * `null` or an object. `rawBody` is intentionally NOT checked — it's typed
+ * `unknown` by design and tests that read it should narrow it themselves.
+ */
+export function isCapturedMutation(value: unknown): value is CapturedMutation {
+  if (typeof value !== "object" || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return (
+    typeof v.operationName === "string" &&
+    (v.variables === null || typeof v.variables === "object")
+  );
+}
+
 /** Behavior variants for `mockPasswordChange`. Mirrors the user-facing error states. */
 export type PasswordChangeBehavior =
   | "success"
