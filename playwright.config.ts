@@ -82,8 +82,33 @@ export default defineConfig({
   // so behaviour is deterministic across machines).
   workers: process.env.CI ? 4 : 8,
   retries: 1,
-  timeout: 30_000,
-  expect: { timeout: 10_000 },
+  // With mocked APIs, per-test work is sub-10s in steady state. 20s catches a
+  // single browser cold-start while still failing fast on stuck navigations.
+  timeout: 20_000,
+  expect: {
+    // Expect default of 10s assumes real network round-trips. Mocked endpoints
+    // resolve in <100ms; 5s gives plenty of headroom for first-paint hydration
+    // without inflating wall-clock when an assertion misses.
+    timeout: 5_000,
+    // Native visual-regression defaults — applied to every `toHaveScreenshot()`
+    // call in the suite (currently only `tests/profile-visual.spec.ts`).
+    //
+    //   maxDiffPixels: 50   — absolute pixel tolerance. ~50 covers anti-aliased
+    //                         font edge variance across Chrome point releases
+    //                         without hiding real layout shifts.
+    //   threshold: 0.2      — per-pixel color-difference tolerance (0–1). 0.2
+    //                         is Playwright's documented default; pinned here
+    //                         so future Playwright upgrades can't silently
+    //                         tighten it and turn green specs red.
+    //   animations: "disabled" — pause CSS animations + remove caret blink at
+    //                         capture time. Belt-and-braces with the global
+    //                         animation-disable stylesheet in profile.fixture.
+    toHaveScreenshot: {
+      maxDiffPixels: 50,
+      threshold: 0.2,
+      animations: "disabled",
+    },
+  },
   reporter: [["html", { open: "never" }]],
   use: {
     baseURL: BASE_URL,

@@ -70,11 +70,12 @@ test.describe("Forgot password — negative & security", () => {
       );
 
       // Generic confirmation must appear — same copy as valid-email flow.
+      // Cognito is mocked → response is instant; 5s covers cold-start hydration.
       await expect(
         page.getByRole("heading", {
           name: /please.*check.*e-?mail|prosím.*zkontrolujte.*e-?mail/i,
         }),
-      ).toBeVisible({ timeout: 10_000 });
+      ).toBeVisible({ timeout: 5_000 });
     },
   );
 });

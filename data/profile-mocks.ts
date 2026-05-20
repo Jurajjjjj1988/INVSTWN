@@ -170,11 +170,44 @@ const URL_NOTIFICATIONS_GRAPHQL = "**/notifications/api/graphql";
 const URL_COGNITO = /cognito-idp\.[a-z0-9-]+\.amazonaws\.com/;
 
 const THIRD_PARTY_BLOCKLIST: readonly string[] = [
+  // Exponea (now Bloomreach) — customer-data platform; fires on every nav.
   "**/api.eu1.exponea.com/**",
+  "**/*.exponea.com/**",
+  // Intercom backend (chat widget is whitelisted separately for chat tests).
   "**/api-iam.intercom.io/**",
+  "**/*.intercomcdn.com/**",
+  // Google Analytics + GTM — fired on app load and most nav events.
   "**/region1.google-analytics.com/**",
   "**/*.googletagmanager.com/**",
   "**/*.google-analytics.com/**",
+  // Facebook Pixel — verified in Investown bundle via `fbq(...)` calls.
+  "**/connect.facebook.net/**",
+  "**/*.facebook.com/tr/**",
+  // Hotjar — session-recording + heatmap (~150-300ms first-paint penalty).
+  "**/*.hotjar.com/**",
+  "**/*.hotjar.io/**",
+  // Mixpanel — event analytics CDN + ingestion.
+  "**/*.mixpanel.com/**",
+  // Segment — analytics router; if not used, the CDN probe still costs ~50ms.
+  "**/cdn.segment.com/**",
+  "**/api.segment.io/**",
+  // Sentry — frontend error reporting; ingest can stall on cold connections.
+  "**/*.sentry.io/**",
+  "**/*.ingest.sentry.io/**",
+  // Cloudflare web analytics insights beacon.
+  "**/static.cloudflareinsights.com/**",
+  // LinkedIn Insight tag + ad pixels.
+  "**/snap.licdn.com/**",
+  "**/px.ads.linkedin.com/**",
+  // Twitter (X) ad/conversion pixel.
+  "**/static.ads-twitter.com/**",
+  "**/analytics.twitter.com/**",
+  // DoubleClick / AdServices — Google Ads conversion.
+  "**/*.doubleclick.net/**",
+  "**/googleads.g.doubleclick.net/**",
+  "**/*.googleadservices.com/**",
+  // Bing Ads UET tag.
+  "**/bat.bing.com/**",
 ];
 
 /**

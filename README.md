@@ -179,6 +179,28 @@ CROSS_BROWSER=1 npm test
 
 `TEST_ENV` accepts `dev` | `staging` | `prod` and resolves to the matching `*.investown.net` host. `BASE_URL` still wins as an explicit override. `CROSS_BROWSER=1` adds firefox + webkit projects; pick one with `--project=firefox`.
 
+## Visual regression
+
+Three snapshot tests in `tests/profile-visual.spec.ts` capture key
+sections of the profile portal. Snapshots live in
+`tests/profile-visual.spec.ts-snapshots/`.
+
+**Update snapshots** (after intentional UI change):
+
+```bash
+npx playwright test profile-visual.spec.ts --update-snapshots
+```
+
+**Run only visual tests**:
+
+```bash
+npx playwright test --grep @visual
+```
+
+First run on a new machine generates the baseline. Subsequent runs
+compare. If a diff appears in the test report, inspect — it's either
+a real visual regression or expected (in which case update).
+
 ## Project structure
 
 ```
