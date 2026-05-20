@@ -44,8 +44,7 @@ test.describe("Sign in", () => {
         page.url().includes("/dashboard") ||
         (await page
           .getByRole("heading", { name: /last step/i })
-          .isVisible({ timeout: 5_000 })
-          .catch(() => false));
+          .isVisible({ timeout: 5_000 }));
 
       expect(onDashboardOrLastStep, `Got ${page.url()}`).toBe(true);
     },
