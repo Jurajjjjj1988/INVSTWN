@@ -9,6 +9,7 @@
     "typecheck": "playwright test --list"
   },
   "devDependencies": {
+    "@faker-js/faker": "^10.4.0",
     "@playwright/test": "^1.52.0",
     "dotenv": "^17.0.0"
   }

@@ -9,7 +9,12 @@ export class ResetPasswordPage {
   constructor(page: Page) {
     this.page = page;
     // Selectors verified via Walk & Watch DOM snapshot — exact strings.
-    this.newPasswordInput = page.getByRole("textbox", { name: "New password" });
+    // exact:true on "New password" — "Confirm new password" also contains it,
+    // so a substring match would resolve to both inputs (strict-mode violation).
+    this.newPasswordInput = page.getByRole("textbox", {
+      name: "New password",
+      exact: true,
+    });
     this.confirmPasswordInput = page.getByRole("textbox", {
       name: "Confirm new password",
     });

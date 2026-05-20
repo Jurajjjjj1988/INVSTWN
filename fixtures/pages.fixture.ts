@@ -1,4 +1,4 @@
-import { test as base } from "@playwright/test";
+import { test as base, type Page } from "@playwright/test";
 import { SignUpEmailPage } from "../pages/sign-up-email.page.js";
 import { SignUpPhonePage } from "../pages/sign-up-phone.page.js";
 import { DashboardPage } from "../pages/dashboard.page.js";
@@ -7,6 +7,7 @@ import { SignInPage } from "../pages/sign-in.page.js";
 import { ForgotPasswordPage } from "../pages/forgot-password.page.js";
 import { ResetPasswordPage } from "../pages/reset-password.page.js";
 import { ProfilePage } from "../pages/profile.page.js";
+import { refreshSessionIfNeeded } from "../helpers/session.js";
 
 type Pages = {
   signUpEmailPage: SignUpEmailPage;
@@ -17,6 +18,7 @@ type Pages = {
   forgotPasswordPage: ForgotPasswordPage;
   resetPasswordPage: ResetPasswordPage;
   profilePage: ProfilePage;
+  loggedInPage: Page;
 };
 
 export const test = base.extend<Pages>({
@@ -43,6 +45,18 @@ export const test = base.extend<Pages>({
   },
   profilePage: async ({ page }, use) => {
     await use(new ProfilePage(page));
+  },
+  /**
+   * Authenticated `Page` with auto-refresh if the baseline storageState
+   * session has expired (e.g., in long-running suites). Triggers a no-op
+   * navigation to `/`, then re-logs in via {@link SignInPage} if the app
+   * redirected to `/sign-in`. Tests can then `goto()` protected routes
+   * without inline expiry handling.
+   */
+  loggedInPage: async ({ page, signInPage }, use) => {
+    await page.goto("/");
+    await refreshSessionIfNeeded(page, signInPage);
+    await use(page);
   },
 });
 

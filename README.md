@@ -164,6 +164,21 @@ npm run test:ui                       # interactive UI mode
 npx playwright test sign-in.spec.ts   # one file
 ```
 
+### Environment + cross-browser
+
+```bash
+# Default: dev environment, Chrome only (~1 min)
+npm test
+
+# Different environment
+TEST_ENV=staging npm test
+
+# Cross-browser (chrome + firefox + webkit, ~3x time)
+CROSS_BROWSER=1 npm test
+```
+
+`TEST_ENV` accepts `dev` | `staging` | `prod` and resolves to the matching `*.investown.net` host. `BASE_URL` still wins as an explicit override. `CROSS_BROWSER=1` adds firefox + webkit projects; pick one with `--project=firefox`.
+
 ## Project structure
 
 ```

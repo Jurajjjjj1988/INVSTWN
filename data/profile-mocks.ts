@@ -1,4 +1,5 @@
 import type { Page, Route, Request } from "@playwright/test";
+import { faker } from "@faker-js/faker";
 
 /**
  * API mocking helpers for /user (profile) section tests.
@@ -114,6 +115,38 @@ export const DEFAULT_USER_DISPLAY = {
   /** Phone with spaces, as rendered by the UI. */
   phoneFormatted: "+44 7481 765995",
 } as const;
+
+/**
+ * Generate a deterministic fake user fixture via `@faker-js/faker`.
+ *
+ * Why this exists (not a replacement for `DEFAULT_USER`):
+ *   - `DEFAULT_USER` MUST stay literal because most profile tests assert against
+ *     its exact strings (e.g. `toHaveText("Test Testovaci")`). Randomising it
+ *     would break every existing assertion.
+ *   - This helper is for tests that WANT variety — name-rendering edge cases,
+ *     XSS payload injection, future fuzz tests — without coupling to the real
+ *     test-account literals.
+ *
+ * Determinism: `faker.seed(seed)` makes output reproducible across runs. Pass
+ * the same seed and the same names/email come back. Default seed `42` is an
+ * arbitrary but stable choice; override only when you need fixture variety
+ * within a single test file.
+ *
+ * Phone stays literal `+447481765995`: it's a real UK temp number tied to SMS
+ * 2FA on the live Investown test account. Randomising it would defeat 2FA
+ * routing. Tests that need a different phone for mock-only flows can spread:
+ * `{ ...generateFakeUser(), phoneNumber: "..." }`.
+ */
+export function generateFakeUser(seed = 42): UserDetailsFixture {
+  faker.seed(seed);
+  return {
+    firstName: faker.person.firstName(),
+    lastName: faker.person.lastName(),
+    email: faker.internet.email().toLowerCase(),
+    phoneNumber: "+447481765995",
+    preferredLocale: "cs-CZ",
+  };
+}
 
 /** Default notification preferences — all toggles OFF (clean slate). */
 export const DEFAULT_NOTIFICATIONS: NotificationPreferences = {

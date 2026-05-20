@@ -1,6 +1,4 @@
 import { test, expect } from "../fixtures/pages.fixture.js";
-import { waitForEmail, extractLink } from "../helpers/mailsac.js";
-import { ForgotPasswordPage } from "../pages/forgot-password.page.js";
 import { TEST_DATA } from "../data/test-data.js";
 
 const EMAIL = TEST_DATA.SIGN_UP.EMAIL;
@@ -32,37 +30,24 @@ const INVALID_PASSWORDS = [
 /**
  * Password-policy validation on /reset-password.
  *
- * Strategy: one shared reset link (requested once in beforeAll), all tests
- * navigate to it and fill the form — NEVER submit. Token stays valid.
- * Serial mode prevents two tests fighting over the same input fields.
+ * Strategy: synthetic reset URL with fake code. These tests NEVER submit the
+ * form — they only verify the submit button stays disabled for invalid
+ * passwords, so the code never needs to be valid. This avoids hitting
+ * Investown's per-account password-reset rate-limit (the real reason this
+ * suite was previously skipped).
  *
- * Whole suite is `describe.fixme` because beforeAll requests a fresh reset link,
- * which hits Investown's per-account password-reset rate-limit. Re-enable once
- * a per-run dedicated account is set up.
+ * Serial mode prevents two tests fighting over the same input fields.
  */
-test.describe.fixme("Reset password — validation rules", () => {
+test.describe("Reset password — validation rules", () => {
   test.describe.configure({ mode: "serial" });
   test.setTimeout(90_000);
 
-  let resetUrl = "";
+  // Clear the shared signed-in session — /reset-password redirects authenticated
+  // users to the dashboard, which would prevent the form from rendering.
+  test.use({ storageState: { cookies: [], origins: [] } });
 
-  test.beforeAll(async ({ browser }) => {
-    const ctx = await browser.newContext();
-    const page = await ctx.newPage();
-    const forgot = new ForgotPasswordPage(page);
-    const sinceMs = Date.now();
-
-    await forgot.navigate();
-    await forgot.requestReset(EMAIL);
-
-    const mail = await waitForEmail(EMAIL, {
-      subject: "INVESTOWN",
-      sinceMs,
-      timeoutMs: 60_000,
-    });
-    resetUrl = extractLink(mail.html, "reset-password");
-    await ctx.close();
-  });
+  // Synthetic reset URL — fake code, never submitted, no backend call.
+  const resetUrl = `/reset-password#u=${encodeURIComponent(EMAIL)}&c=123456`;
 
   for (const { rule, newPwd, confirmPwd } of INVALID_PASSWORDS) {
     test(
