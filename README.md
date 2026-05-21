@@ -33,21 +33,21 @@ Tested contract = same one frontend uses. RHF/anti-bot fragility removed. See `h
 
 ## Profile portal tests (`/user`)
 
-End-to-end coverage of the account portal (8 sub-sections under `/user/*`). Mocked backend, parallel-safe. Split across `tests/profile.spec.ts` (everything except Intercom) and `tests/profile-chat.spec.ts` (chat widget, baseline keeps Intercom unblocked). ~30 tests total, all green.
+End-to-end coverage of the account portal (8 sub-sections under `/user/*`). Mocked backend, parallel-safe. Split across `tests/profile.spec.ts` (everything except Intercom) and `tests/profile-chat.spec.ts` (chat widget, baseline keeps Intercom unblocked). ~29 tests total, all green.
 
 ### What's covered
 
-| Section       | Route                   | Tests | Notes                                                                                 |
-| ------------- | ----------------------- | ----- | ------------------------------------------------------------------------------------- |
-| Osobní údaje  | `/user`                 | 2     | Name/e-mail/phone/ID rendering, edit-disabled                                         |
-| Dokumenty     | `/user/documents`       | 2     | 6 download links + click opens content in new tab                                     |
-| Notifikace    | `/user/notifications`   | 4     | E-mail + SMS toggles, mutation payload, error revert, persistence                     |
-| Jazyky        | `/user/languages`       | 1     | Czech default, English switch                                                         |
-| Změna hesla   | `/user/password-change` | 7     | RHF blur, wrong-current, same-as-current, plaintext guard, locale switch              |
-| Dvoufaktorové | `/user/mfa`             | 4     | Aktivovat reveals input + 3 negative paths (empty, non-numeric, wrong code)           |
-| Podpora       | `/user/support`         | 1     | `support@investown.cz` mailto + chat trigger                                          |
-| Auth + nav    | all `/user/*`           | 3     | Logout + deep-link auth guard + back-after-logout (BFCache)                           |
-| Chatbot       | `/user/support`         | 2     | Intercom launcher opens messenger + personalized greeting (in `profile-chat.spec.ts`) |
+| Section       | Route                   | Tests | Notes                                                                                              |
+| ------------- | ----------------------- | ----- | -------------------------------------------------------------------------------------------------- |
+| Osobní údaje  | `/user`                 | 4     | Name/e-mail/phone/ID rendering, edit-disabled, Terminate account dialog (cancel + mocked confirm)  |
+| Dokumenty     | `/user/documents`       | 2     | 6 download links + click opens content in new tab                                                  |
+| Notifikace    | `/user/notifications`   | 4     | E-mail + SMS toggles, mutation payload, error revert, persistence                                  |
+| Jazyky        | `/user/languages`       | 1     | Czech default, English switch                                                                      |
+| Změna hesla   | `/user/password-change` | 7     | RHF blur, wrong-current, same-as-current, plaintext guard, locale switch                           |
+| Dvoufaktorové | `/user/mfa`             | 5     | Aktivovat reveals input + 3 negative paths (empty, non-numeric, wrong code) + Send-new-code resend |
+| Podpora       | `/user/support`         | 1     | `support@investown.cz` mailto + chat trigger                                                       |
+| Auth + nav    | all `/user/*`           | 3     | Logout + deep-link auth guard + back-after-logout (BFCache)                                        |
+| Chatbot       | `/user/support`         | 2     | Intercom launcher opens messenger + personalized greeting (in `profile-chat.spec.ts`)              |
 
 Tag split: `@positive` (happy paths), `@negative` (error states from mocked APIs), `@edge` (RHF blur, error revert), `@security` (auth guard, wrong current, same-as-current).
 
