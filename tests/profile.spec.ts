@@ -67,6 +67,113 @@ test.describe("Profile — Osobní údaje", () => {
       await expect(profilePage.personalData.editDisabledMessage).toBeVisible();
     },
   );
+
+  test(
+    "Terminate account opens confirmation dialog with Close + Delete buttons",
+    { tag: ["@positive", "@profile"] },
+    async ({ page, profilePage }) => {
+      // Triple safety against the destructive action:
+      // 1. Mock ALL plausible delete endpoints — if the click ever reaches
+      //    confirm, the network call is fulfilled with success and never hits
+      //    the real backend.
+      // 2. This test only clicks Cancel (Close); never confirm.
+      // 3. Mock counter asserts ZERO requests fired during cancel path.
+      let deleteRequestCount = 0;
+      await page.route(
+        /cognito-idp\.[a-z0-9-]+\.amazonaws\.com|\/users\/api\/v1\/users\/me|\/users\/api\/v1\/users\/delete|\/users\/api\/graphql|\/core\/api\/graphql/,
+        async (route) => {
+          const target = route.request().headers()["x-amz-target"] ?? "";
+          const body = route.request().postData() ?? "";
+          const method = route.request().method();
+          const looksLikeDelete =
+            target.includes("DeleteUser") ||
+            method === "DELETE" ||
+            /Delete\w*Account|TerminateAccount|deleteUser|deleteAccount/i.test(
+              body,
+            );
+          if (looksLikeDelete) {
+            deleteRequestCount++;
+            return route.fulfill({
+              status: 200,
+              contentType: "application/json",
+              body: JSON.stringify({ success: true }),
+            });
+          }
+          await route.fallback();
+        },
+      );
+
+      await profilePage.gotoSection("personalData");
+      await profilePage.personalData.deleteAccountButton.click();
+
+      // Dialog rendered.
+      await expect(
+        profilePage.personalData.deleteDialogCancelButton,
+      ).toBeVisible();
+      await expect(
+        profilePage.personalData.deleteDialogConfirmButton,
+      ).toBeVisible();
+
+      // Cancel — must NOT fire any delete endpoint.
+      await profilePage.personalData.deleteDialogCancelButton.click();
+      await expect(
+        profilePage.personalData.deleteDialogConfirmButton,
+      ).toBeHidden();
+      expect(
+        deleteRequestCount,
+        "Cancel path must not call any delete endpoint",
+      ).toBe(0);
+    },
+  );
+
+  test(
+    "confirming account deletion fires a delete request (mocked)",
+    { tag: ["@positive", "@profile", "@security"] },
+    async ({ page, profilePage }) => {
+      // Same triple-safety mock as above. This test DOES click Delete account,
+      // but the mock intercepts before any real backend call. The real
+      // Investown account remains untouched.
+      let deleteRequestCount = 0;
+      await page.route(
+        /cognito-idp\.[a-z0-9-]+\.amazonaws\.com|\/users\/api\/v1\/users\/me|\/users\/api\/v1\/users\/delete|\/users\/api\/graphql|\/core\/api\/graphql/,
+        async (route) => {
+          const target = route.request().headers()["x-amz-target"] ?? "";
+          const body = route.request().postData() ?? "";
+          const method = route.request().method();
+          const looksLikeDelete =
+            target.includes("DeleteUser") ||
+            method === "DELETE" ||
+            /Delete\w*Account|TerminateAccount|deleteUser|deleteAccount/i.test(
+              body,
+            );
+          if (looksLikeDelete) {
+            deleteRequestCount++;
+            return route.fulfill({
+              status: 200,
+              contentType: "application/json",
+              body: JSON.stringify({ success: true }),
+            });
+          }
+          await route.fallback();
+        },
+      );
+
+      await profilePage.gotoSection("personalData");
+      await profilePage.personalData.deleteAccountButton.click();
+      await expect(
+        profilePage.personalData.deleteDialogConfirmButton,
+      ).toBeVisible();
+
+      await profilePage.personalData.deleteDialogConfirmButton.click();
+
+      // Mock caught at least one delete-shaped request. Without this assertion
+      // the test could pass even if the button did nothing — that would be a
+      // worse-than-broken UI (silent failure on destructive action).
+      await expect
+        .poll(() => deleteRequestCount, { timeout: 5_000 })
+        .toBeGreaterThanOrEqual(1);
+    },
+  );
 });
 
 test.describe("Profile — Dokumenty", () => {

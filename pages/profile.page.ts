@@ -75,6 +75,10 @@ export class ProfilePage {
     idDocumentValue: Locator;
     editDisabledMessage: Locator;
     deleteAccountButton: Locator;
+    /** Confirmation modal "Close" / cancel button — safe, dismisses without API call. */
+    deleteDialogCancelButton: Locator;
+    /** Confirmation modal "Delete account" button — DESTRUCTIVE. Tests must mock backend before clicking. */
+    deleteDialogConfirmButton: Locator;
   };
 
   readonly documents: {
@@ -194,7 +198,16 @@ export class ProfilePage {
       editDisabledMessage: page.getByText(
         "Pro změnu údajů kontaktujte naši podporu.",
       ),
-      deleteAccountButton: page.getByRole("button", { name: "Zrušit účet" }),
+      // Bilingual — UI flips CZ/EN per account preferredLocale.
+      deleteAccountButton: page.getByRole("button", {
+        name: /Zrušit účet|Terminate account/,
+      }),
+      deleteDialogCancelButton: page.getByRole("button", {
+        name: /Zavřít|Close/,
+      }),
+      deleteDialogConfirmButton: page.getByRole("button", {
+        name: /Smazat účet|Delete account/,
+      }),
     };
 
     // ---- Dokumenty (/user/documents)
