@@ -561,6 +561,57 @@ test.describe("Profile — 2FA", () => {
   );
 
   test(
+    "clicking 'Send a new code' re-triggers SMS dispatch",
+    { tag: ["@positive", "@mfa"] },
+    async ({ page, profilePage }) => {
+      // Mock the Cognito GetUserAttributeVerificationCode endpoint — both the
+      // initial Activate click AND the Send-a-new-code click hit this same
+      // X-Amz-Target. Verified live on 2026-05-21. We must mock OR we'd burn
+      // a real SMS to the test phone number on every CI run.
+      let smsRequestCount = 0;
+      await page.route(
+        /cognito-idp\.[a-z0-9-]+\.amazonaws\.com/,
+        async (route) => {
+          const target = route.request().headers()["x-amz-target"] ?? "";
+          if (target.includes("GetUserAttributeVerificationCode")) {
+            smsRequestCount++;
+            return route.fulfill({
+              status: 200,
+              contentType: "application/x-amz-json-1.1",
+              body: JSON.stringify({
+                CodeDeliveryDetails: {
+                  AttributeName: "phone_number",
+                  DeliveryMedium: "SMS",
+                  Destination: "+********5995",
+                },
+              }),
+            });
+          }
+          await route.fallback();
+        },
+      );
+
+      await profilePage.gotoSection("mfa");
+      await profilePage.mfa.activateButton.click();
+      await expect(profilePage.mfa.smsCodeInput).toBeVisible();
+      await expect(profilePage.mfa.sendNewCodeButton).toBeVisible();
+
+      // First activation fired at least one SMS dispatch. Capture the count
+      // before the resend so we can prove the click DID trigger a NEW call.
+      await expect
+        .poll(() => smsRequestCount, { timeout: 5_000 })
+        .toBeGreaterThanOrEqual(1);
+      const beforeResend = smsRequestCount;
+
+      await profilePage.mfa.sendNewCodeButton.click();
+
+      await expect
+        .poll(() => smsRequestCount, { timeout: 5_000 })
+        .toBeGreaterThan(beforeResend);
+    },
+  );
+
+  test(
     "empty SMS code does not auto-activate 2FA",
     { tag: ["@negative", "@mfa"] },
     async ({ page, profilePage }) => {
